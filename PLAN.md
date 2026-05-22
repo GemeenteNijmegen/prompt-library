@@ -529,17 +529,7 @@ Files in the learning platform that reference prompts and need to be updated aft
 > **Decision**: No Dockerfile or docker-compose. This workspace already runs inside Docker; local install via `pip install -e .` and `uvicorn src.main:app` avoids Docker-in-Docker pitfalls. Production containerization belongs in the CI/CD pipeline.
 - Basic tests (conftest, health check)
 
-#### Phase 2: Auth & Middleware
-
-- JWKS fetcher + JWT validation (`jwt_utils.py`)
-- Auth middleware (`middleware/auth.py`)
-- User auto-upsert
-- `/me` endpoint
-- `/auth/generate-key` endpoint
-- CLI key generation script
-- Test fixtures for signed JWTs
-
-#### Phase 3: Core API — Prompts
+#### Phase 2: Core API — Prompts
 
 - Pydantic schemas (prompt, category, tag, rating, upload)
 - Prompt CRUD routers (`routers/prompts.py`)
@@ -550,7 +540,20 @@ Files in the learning platform that reference prompts and need to be updated aft
 - Search backend (keyword)
 - Full test suite
 
-> **Note on schema timing:** Pydantic schemas are intentionally deferred to Phase 3. Phase 1 and 2 endpoints (`/health`, `/me`, `/auth/generate-key`) use inline response dicts or minimal ad-hoc models. The shared `schemas/` layer is built once here, covering all domain types together before any CRUD endpoint is wired up.
+> **Auth dependency:** Full JWT validation is not yet wired at this phase. Protected endpoints (`prompt:create`, `prompt:write`, `prompt:publish`, `prompt:rate`) are guarded by a **stub auth dependency** that accepts a hardcoded dev token and injects a fixed user identity. This lets the full CRUD and rating test suite run without a real IdP. The stub is replaced wholesale in Phase 3. Do not ship Phase 2 to production.
+
+> **Note on schema timing:** Pydantic schemas are built at the start of this phase, covering all domain types, before any router is wired up. Phase 1 endpoints (`/health`) use inline response dicts only.
+
+#### Phase 3: Auth & Middleware
+
+- JWKS fetcher + JWT validation (`jwt_utils.py`)
+- Auth middleware (`middleware/auth.py`) — replaces stub from Phase 2
+- User auto-upsert
+- `/me` endpoint
+- `/auth/generate-key` endpoint
+- CLI key generation script
+- Test fixtures for signed JWTs (used to retrofit Phase 2 tests)
+- Retrofit Phase 2 protected-endpoint tests to use real signed JWT fixtures instead of the stub
 
 #### Phase 4: Image Uploads
 
