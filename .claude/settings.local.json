@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh repo *)",
+      "Bash(gh label *)",
+      "Bash(gh issue *)",
+      "Bash(gh auth *)",
+      "Bash(gh api *)",
+      "Bash(cat)",
+      "Read(//tmp/**)",
+      "Bash(curl -s http://localhost:8000/api/v1/health)",
+      "Bash(python *)",
+      "Bash(curl -s http://localhost:8000/api/v1/categories)",
+      "Bash(curl -s http://localhost:8000/api/v1/tags)",
+      "Bash(curl -s http://localhost:8000/api/v1/prompts)",
+      "Bash(pip show *)",
+      "Bash(pip list *)",
+      "Bash(python3 -m pytest tests/ -x -q)",
+      "Bash(python3 *)",
+      "Bash(chmod +x *)",
+      "Bash(git *)"
+    ]
+  }
+}
