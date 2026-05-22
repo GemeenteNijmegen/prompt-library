@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     MAX_UPLOAD_SIZE: int = 5_242_880  # 5 MB
 
     # Embeddings
-    EMBEDDING_MODEL: str = "intfloat/multilingual-e5-small"
+    EMBEDDING_MODEL: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     EMBEDDING_USE_FAKE: bool = False
 
     @field_validator("CORS_ORIGINS", mode="before")

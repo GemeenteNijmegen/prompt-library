@@ -111,7 +111,7 @@ scripts/
 | Visibility | `public` / `internal` / `restricted`; unauthenticated callers see only `public+published` | Layered access without complex RBAC |
 | Database | SQLite (dev/test), PostgreSQL (prod); `embedding_vector` stored as TEXT in SQLite | Alembic migration can add JSONB guard for Postgres |
 | Semantic search | Hybrid: ILIKE keyword + brute-force cosine over in-process matrix cache; fused via RRF (k=60) | See ADR-0001; no pgvector needed at this corpus size |
-| Embeddings | `intfloat/multilingual-e5-small` (384-dim) via `fastembed`; Protocol-based so model is swappable via `EMBEDDING_MODEL` | Dutch+English gallery content; multilingual model chosen per ADR-0002 |
+| Embeddings | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` (384-dim) via `fastembed`; Protocol-based so model is swappable via `EMBEDDING_MODEL` | Dutch+English gallery content; multilingual model chosen per ADR-0002 |
 | Vector cache | Module-level `dict[int, np.ndarray]` with 60s TTL; loaded lazily on first search; invalidated on same-process writes | Matches TTL pattern of featured/categories/tags cache |
 | Embed on write | `create_prompt` always embeds; `update_prompt` re-embeds only when title/description/prompt_text changes | Avoid re-embedding on metadata-only PATCH (e.g., `featured`, `visibility`) |
 | Response envelope | All responses wrapped: `{"data": ...}` or `{"data": ..., "meta": {...}}` | Consistent for all consumers |

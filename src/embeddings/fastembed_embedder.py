@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-# Prefix map for models that require query/passage prefixes
+# Prefix map for models that require asymmetric query/passage prefixes (E5-style)
 _PREFIXES: dict[str, tuple[str, str]] = {
-    "intfloat/multilingual-e5-small": ("query: ", "passage: "),
-    "intfloat/multilingual-e5-base": ("query: ", "passage: "),
     "intfloat/multilingual-e5-large": ("query: ", "passage: "),
 }
 
@@ -11,13 +9,13 @@ _PREFIXES: dict[str, tuple[str, str]] = {
 class FastembedEmbedder:
     """fastembed-backed embedder; lazy-loads model on first use."""
 
-    def __init__(self, model_name: str = "intfloat/multilingual-e5-small") -> None:
+    def __init__(self, model_name: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2") -> None:
         self.model_name = model_name
         query_prefix, passage_prefix = _PREFIXES.get(model_name, ("", ""))
         self._query_prefix = query_prefix
         self._passage_prefix = passage_prefix
         self._model = None
-        # dimension is determined after first use; default to 384 for E5-small
+        # dimension is determined after first use; default to 384 (MiniLM-L12-v2 and most small models)
         self.dimension: int = 384
 
     def _get_model(self):

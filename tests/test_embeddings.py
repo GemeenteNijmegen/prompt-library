@@ -88,7 +88,8 @@ class TestFastembedEmbedder:
         mock_model = MagicMock()
         mock_model.embed.return_value = iter([np.ones(384, dtype=np.float32)])
 
-        embedder = FastembedEmbedder("intfloat/multilingual-e5-small")
+        # multilingual-e5-large is in the prefix map
+        embedder = FastembedEmbedder("intfloat/multilingual-e5-large")
         embedder._model = mock_model
 
         embedder.embed_query("hond")
@@ -100,23 +101,24 @@ class TestFastembedEmbedder:
         call_args = mock_model.embed.call_args[0][0]
         assert call_args[0] == "passage: hond"
 
-    def test_query_and_passage_differ_due_to_prefix(self):
+    def test_no_prefix_for_default_model(self):
+        """Default model (MiniLM) is symmetric — no query/passage prefix."""
         from src.embeddings.fastembed_embedder import FastembedEmbedder
 
-        call_count = [0]
-        def make_vec(*args, **kwargs):
-            call_count[0] += 1
-            vec = np.zeros(384, dtype=np.float32)
-            vec[call_count[0] - 1] = 1.0
-            return iter([vec])
+        mock_model = MagicMock()
+        mock_model.embed.return_value = iter([np.ones(384, dtype=np.float32)])
 
-        embedder = FastembedEmbedder("intfloat/multilingual-e5-small")
-        embedder._model = MagicMock()
-        embedder._model.embed.side_effect = make_vec
+        embedder = FastembedEmbedder("sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
+        embedder._model = mock_model
 
-        vq = embedder.embed_query("hond")
-        vp = embedder.embed_passage("hond")
-        assert vq != vp
+        embedder.embed_query("hond")
+        call_args = mock_model.embed.call_args[0][0]
+        assert call_args[0] == "hond"
+
+        mock_model.embed.return_value = iter([np.ones(384, dtype=np.float32)])
+        embedder.embed_passage("hond")
+        call_args = mock_model.embed.call_args[0][0]
+        assert call_args[0] == "hond"
 
     def test_no_prefix_for_unknown_model(self):
         from src.embeddings.fastembed_embedder import FastembedEmbedder
@@ -133,7 +135,7 @@ class TestFastembedEmbedder:
 
     def test_lazy_load(self):
         from src.embeddings.fastembed_embedder import FastembedEmbedder
-        e = FastembedEmbedder("intfloat/multilingual-e5-small")
+        e = FastembedEmbedder()
         assert e._model is None
 
 

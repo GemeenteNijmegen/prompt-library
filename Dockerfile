@@ -19,7 +19,7 @@ CMD ["sh", "-c", "alembic upgrade head && uvicorn src.main:app --host 0.0.0.0 --
 # Production image with model weights bundled — avoids HuggingFace download at boot
 FROM app AS app-with-embeddings
 
-ARG EMBEDDING_MODEL=intfloat/multilingual-e5-small
+ARG EMBEDDING_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
 ENV FASTEMBED_CACHE_PATH=/root/.cache/fastembed
 ENV EMBEDDING_MODEL=${EMBEDDING_MODEL}
 

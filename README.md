@@ -44,7 +44,7 @@ For real semantic search with the bundled ML model (requires building `app-with-
 docker-compose --profile embeddings up
 ```
 
-This starts Postgres, Redis, and the `app-with-embeddings` image which has `intfloat/multilingual-e5-small` weights pre-baked in. The default (`full`) profile uses the slim image with `EMBEDDING_USE_FAKE=false` (fastembed downloads on first use if model is not cached).
+This starts Postgres, Redis, and the `app-with-embeddings` image which has `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` weights pre-baked in. The default (`full`) profile uses the slim image with `EMBEDDING_USE_FAKE=false` (fastembed downloads on first use if model is not cached).
 
 Build and run the image directly:
 
@@ -109,7 +109,7 @@ All routes are under `/api/v1/`. Health: `GET /api/v1/health`.
 | `RATE_LIMIT_MACHINE`   | `300`                       | Requests/min for machine tokens                                    |
 | `MAX_UPLOAD_SIZE`      | `5242880`                   | Max upload file size in bytes (default: 5 MB)                      |
 | `LOG_LEVEL`            | `info`                      | Log verbosity: `debug`, `info`, `warning`, `error`                 |
-| `EMBEDDING_MODEL`      | `intfloat/multilingual-e5-small` | Sentence embedding model for semantic search                  |
+| `EMBEDDING_MODEL`      | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` | Sentence embedding model for semantic search                  |
 | `EMBEDDING_USE_FAKE`   | `false`                     | Use deterministic fake embedder (for dev/test; always set in CI)   |
 
 See `.env.example` for the full variable list.
@@ -190,7 +190,7 @@ Embeddings are computed automatically on `POST /api/v1/prompts` (create) and on 
 
 **Slim image / dev:** Set `EMBEDDING_USE_FAKE=true` to use the deterministic `FakeEmbedder` (no ML model needed). Search still works but rankings are random.
 
-**Production image:** The published `app-with-embeddings` image bundles `intfloat/multilingual-e5-small` (384-dim, multilingual). Override `EMBEDDING_MODEL` to use a different model — but note that switching models requires re-embedding all prompts (see below).
+**Production image:** The published `app-with-embeddings` image bundles `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` (384-dim, multilingual). Override `EMBEDDING_MODEL` to use a different model — but note that switching models requires re-embedding all prompts (see below).
 
 ## Re-embedding prompts
 
@@ -240,7 +240,7 @@ If you use the `full` or `simple` profile (slim image without bundled weights), 
 
 ```bash
 docker compose run --no-deps --rm \
-  -e EMBEDDING_MODEL=intfloat/multilingual-e5-small \
+  -e EMBEDDING_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 \
   -v /path/to/fastembed-cache:/root/.cache/fastembed \
   app python3 scripts/reembed.py --only-missing
 ```
