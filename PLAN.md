@@ -1,6 +1,6 @@
 # Prompt Gallery Extraction Plan
 
-> **Status:** Draft — all 46 decisions resolved
+> **Status:** Draft — all 54 decisions resolved
 > **Date:** 2025-05-01
 > **Context:** Extract the prompt gallery from the learning platform into a standalone REST API service, designed to be consumed by the learning platform, a future MCP server, and other clients.
 
@@ -53,7 +53,7 @@
 | 11d | Revocation         | TTL-bound user tokens + keypair rotation for machine keys                            | No deny list needed; bounded exposure window      |
 | 5d  | JWT verification   | JWKS endpoint (prod) + shared secret HMAC (dev fallback)                             | Standard OIDC flow, simple dev mode               |
 | 14  | Rate limiting      | Tiered: anonymous 30/min, user 120/min, machine 300/min                              | Protects against abuse, different client profiles |
-| 14a | Rate limit backend | In-memory (dev), SQLite (prod) — no Redis                                            | Reuse existing DB, no extra service               |
+| 14a | Rate limit backend | In-memory (dev), SQLite (prod) — no Redis for rate limiting. Redis is supported only as an optional caching layer (see decision 17). | Reuse existing DB for counters, no extra service  |
 
 ### Domain Model
 
@@ -83,7 +83,7 @@
 
 | #     | Area                    | Decision                                                    | Rationale                                                   |
 | ----- | ----------------------- | ----------------------------------------------------------- | ----------------------------------------------------------- |
-| 4a    | Status transitions      | Embedded in PATCH body (`{status: "published"}`)            | RESTful, single endpoint for all updates                    |
+| 4a    | Status transitions      | Embedded in PATCH body (`{status: "published"}`). Valid transitions: `draft→published`, `published→archived`, `archived→draft` (restore). All other transitions are rejected with `409 CONFLICT`. Requires `prompt:publish` permission; `prompt:write` alone is insufficient for status changes. | RESTful, single endpoint for all updates |
 | 4b    | Ratings                 | Authenticated only (JWT required)                           | No anonymous ratings — prevents noise/spam                  |
 | 4c    | Taxonomy                | Categories pre-defined; tags auto-create on prompt creation | Controlled taxonomy, flexible tags                          |
 | 4d    | Image uploads           | Through gallery API (server handles storage call)           | Simple, no presigned URL complexity                         |
@@ -101,12 +101,12 @@
 | `prompt:read`            | List, get detail, search, featured (public + internal)        |
 | `prompt:read:restricted` | Access `restricted` visibility prompts                        |
 | `prompt:create`          | Create new prompts                                            |
-| `prompt:write`           | Update existing prompts (excluding status changes)            |
+| `prompt:write`           | Update existing prompts (excluding status changes). Includes setting `featured: true/false`. |
 | `prompt:publish`         | Transition status (draft→published, published→archived, etc.) |
 | `prompt:rate`            | Submit or view own ratings                                    |
 | `prompt:image`           | Upload/manage prompt images                                   |
 | `admin:manage_taxonomy`  | CRUD on categories and tags                                   |
-| `admin:manage_keys`      | Generate/revoked machine JWT keys                             |
+| `admin:manage_keys`      | Generate/revoke machine JWT keys                              |
 | `admin:manage_users`     | View user profiles (admin console)                            |
 
 **Typical role compositions (for IdP reference):**
@@ -131,7 +131,8 @@ admin:    + prompt:read:restricted admin:*
 | `POST`  | `/api/v1/prompts/{id}/rate`    | `prompt:rate`   | Submit/update rating (0-5)                   |
 | `GET`   | `/api/v1/prompts/{id}/rate`    | `prompt:rate`   | Current user's rating                        |
 | `GET`   | `/api/v1/prompts/{id}/ratings` | Bearer or None  | Aggregated stats (avg, count, distribution)  |
-| `GET`   | `/api/v1/prompts/featured`     | Bearer or None  | Featured prompts (respects permissions)      |
+| `POST`  | `/api/v1/prompts/{id}/use`     | Bearer or None  | Increment use_count (call when a user copies/runs the prompt) |
+| `GET`   | `/api/v1/prompts/featured`     | Bearer or None  | Featured prompts (respects permissions). **Must be registered before `/{id}` in the router to avoid path shadowing.** |
 
 **Query params for `GET /prompts`:**
 
@@ -163,7 +164,10 @@ order                   — asc, desc (default: desc)
 | -------- | ------------------- | ----------------------- | --------------------------- |
 | `GET`    | `/api/v1/tags`      | None                    | List all tags               |
 | `POST`   | `/api/v1/tags`      | `admin:manage_taxonomy` | Create/merge tag            |
+| `GET`    | `/api/v1/tags/{id}` | None                    | Tag detail + prompt count   |
 | `DELETE` | `/api/v1/tags/{id}` | `admin:manage_taxonomy` | Soft-delete (untag prompts) |
+
+> Tag names are immutable after creation. To rename, soft-delete the old tag and create a new one.
 
 #### Image Uploads
 
@@ -258,27 +262,30 @@ CREATE TABLE prompts (
     visibility        TEXT    NOT NULL DEFAULT 'public',    -- public, internal, restricted
     featured          BOOLEAN NOT NULL DEFAULT FALSE,
     creator_id        INTEGER NOT NULL REFERENCES users(id),
-    embedding_vector  JSONB,                     -- placeholder for future semantic search
+    embedding_vector  TEXT,                      -- stored as JSON string; Alembic overrides to JSONB on PostgreSQL. Placeholder for future semantic search.
     view_count        INTEGER NOT NULL DEFAULT 0,
-    use_count         INTEGER NOT NULL DEFAULT 0,
+    use_count         INTEGER NOT NULL DEFAULT 0,   -- incremented via POST /api/v1/prompts/{id}/use
     created_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    published_at      TIMESTAMP
+    published_at      TIMESTAMP,
+    deleted_at        TIMESTAMP                                  -- NULL = active; non-NULL = soft-deleted (status set to 'archived')
 );
 
 -- Categories
 CREATE TABLE prompt_categories (
-    id        INTEGER PRIMARY KEY AUTOINCREMENT,
-    name      TEXT    NOT NULL UNIQUE,          -- indexed
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT    NOT NULL UNIQUE,        -- indexed
     description TEXT,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at  TIMESTAMP                       -- NULL = active; non-NULL = soft-deleted
 );
 
 -- Tags
 CREATE TABLE prompt_tags (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    name         TEXT    NOT NULL UNIQUE,       -- indexed
-    created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT    NOT NULL UNIQUE,        -- indexed
+    created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at  TIMESTAMP                       -- NULL = active; non-NULL = soft-deleted
 );
 
 -- Association tables
@@ -313,7 +320,7 @@ CREATE TABLE prompt_ratings (
 | `DATABASE_URL`         | Yes        | `sqlite:///data/gallery.db` | Database connection string                       |
 | `JWKS_URI`             | Yes (prod) | —                           | JWKS endpoint URL for JWT verification           |
 | `JWT_ISSUER`           | Yes (prod) | `http://localhost:9000`     | Expected `iss` claim value                       |
-| `JWT_PUBLIC_KEY`       | Dev only   | —                           | RSA public key for dev HMAC fallback             |
+| `JWT_SECRET_KEY`       | Dev only   | —                           | Shared HMAC secret for JWT dev fallback. Set when `JWKS_URI` is absent. Do not use in production. |
 | `STORAGE_BACKEND`      | No         | `local`                     | `local` or `s3`                                  |
 | `STORAGE_LOCAL_PATH`   | No         | `./uploads`                 | Local file storage directory                     |
 | `S3_BUCKET`            | S3 only    | —                           | S3 bucket name                                   |
@@ -321,7 +328,7 @@ CREATE TABLE prompt_ratings (
 | `S3_ACCESS_KEY`        | S3 only    | —                           | AWS access key ID                                |
 | `S3_SECRET_KEY`        | S3 only    | —                           | AWS secret access key                            |
 | `CORS_ORIGINS`         | No         | `http://localhost:5173`     | Comma-separated allowed CORS origins             |
-| `REDIS_URL`            | No         | —                           | Redis URL for rate limiting (fallback to SQLite) |
+| `REDIS_URL`            | No         | —                           | Redis URL for optional caching layer (`cachetools.TTLCache` used otherwise). Not used for rate limiting. |
 | `LOG_LEVEL`            | No         | `info`                      | `debug`, `info`, `warning`, `error`              |
 | `ENVIRONMENT`          | No         | `development`               | `development`, `production`, `testing`           |
 | `RATE_LIMIT_ANONYMOUS` | No         | `30`                        | Requests/min for anonymous callers               |
@@ -335,7 +342,7 @@ CREATE TABLE prompt_ratings (
 | ------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | Framework     | **FastAPI**                                                      | Async-native, OpenAPI auto-gen, Pydantic schemas, smaller dependency footprint |
 | Location      | **Separate repo** `prompt-gallery/`                              | Independent CI/CD, versioning, deployment                                      |
-| Database      | **PostgreSQL** (prod) / **SQLite** (dev)                         | Production-grade, JSONB support, pgvector-ready                                |
+| Database      | **PostgreSQL** (prod) / **SQLite** (dev)                         | Production-grade, JSONB support, pgvector-ready. Alembic migration uses `op.execute()` with `IF` guards or dialect checks to apply PostgreSQL-specific types (`JSONB`, full-text indexes) only when the target DB is PostgreSQL. SQLite uses `TEXT` for those columns. |
 | ORM           | **SQLAlchemy 2.0**                                               | Familiar, migrations via Alembic, proven                                       |
 | Schemas       | **Pydantic v2**                                                  | Native to FastAPI, replaces Marshmallow                                        |
 | Server        | **Uvicorn**                                                      | Async-native, matches FastAPI                                                  |
@@ -534,7 +541,7 @@ Files in the learning platform that reference prompts and need to be updated aft
 
 #### Phase 3: Core API — Prompts
 
-- Pydantic schemas (prompt, category, tag, rating)
+- Pydantic schemas (prompt, category, tag, rating, upload)
 - Prompt CRUD routers (`routers/prompts.py`)
 - Business logic (`services/prompt_service.py`)
 - Taxonomy service with auto-create
@@ -543,6 +550,8 @@ Files in the learning platform that reference prompts and need to be updated aft
 - Search backend (keyword)
 - Full test suite
 
+> **Note on schema timing:** Pydantic schemas are intentionally deferred to Phase 3. Phase 1 and 2 endpoints (`/health`, `/me`, `/auth/generate-key`) use inline response dicts or minimal ad-hoc models. The shared `schemas/` layer is built once here, covering all domain types together before any CRUD endpoint is wired up.
+
 #### Phase 4: Image Uploads
 
 - Storage adapter framework (`storage/base.py`, `local.py`)
@@ -550,6 +559,7 @@ Files in the learning platform that reference prompts and need to be updated aft
 - S3 adapter (optional)
 - File size validation
 - Delete endpoint
+- **Test strategy:** `LocalFileSystem` tests use pytest's `tmp_path` fixture (real FS, auto-cleaned). S3 adapter tests mock `boto3` via `moto`. Both adapters are exercised through the API client in `tests/test_uploads.py`, not called directly.
 
 #### Phase 5: Polish
 
@@ -562,7 +572,7 @@ Files in the learning platform that reference prompts and need to be updated aft
 
 ---
 
-## Summary — All 46 Decisions
+## Summary — All 54 Decisions
 
 | #     | Area                | Decision                                                           |
 | ----- | ------------------- | ------------------------------------------------------------------ |
@@ -592,7 +602,7 @@ Files in the learning platform that reference prompts and need to be updated aft
 | 8     | Response format     | Standard `data`/`meta`/`error` envelope                            |
 | 8a    | Error codes         | HTTP status + domain-specific code                                 |
 | 9     | Frontend            | Platform frontend calls gallery API via CORS                       |
-| 9a    | Language            | API in English, content in Dutch                                   |
+| 9a    | Language            | API in English, content in Dutch. All field names, error codes, and status values are English. Prompt text, titles, and descriptions may be in Dutch — the API treats them as opaque strings. |
 | 10a   | Token delivery      | `Authorization: Bearer` header only                                |
 | 10b   | Profile upsert      | Every authenticated request                                        |
 | 10c   | JWT structure       | `sub`, `scope`, `name`, `email`, `avatar_url`, `iss`, `iat`, `exp` |
