@@ -44,6 +44,7 @@ def make_jwt(
     avatar_url: str | None = None,
     scope: list[str] | None = None,
     expired: bool = False,
+    machine: bool = False,
 ) -> str:
     if scope is None:
         scope = [
@@ -69,6 +70,8 @@ def make_jwt(
         "iat": now - 10,
         "exp": (now - 5) if expired else (now + 3600),
     }
+    if machine:
+        payload["token_type"] = "machine"
     return jwt.encode(payload, _JWT_SECRET, algorithm="HS256")
 
 

@@ -33,8 +33,10 @@ src/
 ├── dependencies.py      # DI: get_db, get_current_user, get_optional_user
 │
 ├── middleware/
-│   └── auth.py          # Real JWT middleware: decode_and_verify, user upsert
-│                        # AuthenticatedUser, get_current_user, get_optional_user
+│   ├── auth.py          # Real JWT middleware: decode_and_verify, user upsert
+│   │                    # AuthenticatedUser, get_current_user, get_optional_user
+│   ├── request_id.py    # X-Request-ID echo/generate + request boundary logging
+│   └── rate_limit.py    # Tiered rate limiting: anonymous/user/machine (in-memory counter)
 │
 ├── models/              # SQLAlchemy 2.0 ORM models
 │   ├── user.py          # Profile cache (auto-upserted from JWT claims)
@@ -53,12 +55,20 @@ src/
 │   ├── user.py          # UserProfile (read-only)
 │   └── upload.py        # UploadResponse
 │
+├── cache.py             # TTLCache (in-memory) or Redis; cache_get/set/delete/clear
+│
 ├── routers/             # FastAPI APIRouter per domain
 │   ├── health.py        # GET /health
 │   ├── prompts.py       # /prompts CRUD, ratings, featured, use
 │   ├── categories.py    # /categories CRUD
 │   ├── tags.py          # /tags CRUD
-│   └── auth.py          # GET /me, POST /auth/generate-key
+│   ├── auth.py          # GET /me, POST /auth/generate-key
+│   └── uploads.py       # POST/DELETE /uploads/images
+│
+├── storage/             # Pluggable file storage
+│   ├── base.py          # StorageBackend Protocol
+│   ├── local.py         # LocalFileSystemBackend (dev/test)
+│   └── __init__.py      # Factory: reads STORAGE_BACKEND env var
 │
 ├── services/            # Business logic (no HTTP concerns)
 │   ├── prompt_service.py    # CRUD, status transitions, ratings, featured
@@ -79,6 +89,10 @@ scripts/
 | # | Decision | Rationale |
 |---|---|---|
 | Auth | Hybrid JWT: JWKS (prod RS256) + HMAC dev fallback (HS256, blocked in production) | One code path, two key sources |
+| Storage | `StorageBackend` Protocol; `LocalFileSystemBackend` default, `S3Backend` optional | Swap backend via `STORAGE_BACKEND` env var without touching router code |
+| Caching | `cachetools.TTLCache` (in-memory, 60 s) for featured/categories/tags; Redis when `REDIS_URL` set; invalidated on writes | Hot reads cached with zero infra requirement in dev |
+| Rate limiting | `RateLimitMiddleware`: per-caller, per-minute window counter (anonymous/user/machine tiers) | Protects service without Redis/external dependency |
+| Request tracing | `RequestIDMiddleware` echoes/generates `X-Request-ID`; logs method/path/status/duration per request | Every response traceable; structured log fields for prod aggregation |
 | Token types | User tokens (short-lived) + machine tokens (long-lived, `POST /auth/generate-key`) | Covers interactive and service-to-service use |
 | User upsert | `users` row upserted on every authenticated request from JWT claims | Profile always fresh; no separate sync job |
 | Permissions | Flat `scope` list on `AuthenticatedUser`; `has_scope(perm)` check in routers | Matches JWT `scope` claim directly |

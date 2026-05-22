@@ -16,4 +16,3 @@ uploads/
 .coverage
 htmlcov/
 *.log
-openapi/openapi.json

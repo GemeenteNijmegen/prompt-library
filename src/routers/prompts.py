@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from src.cache import cache_delete, cache_get, cache_set
 from src.dependencies import get_db, get_current_user, get_optional_user
 from src.schemas.prompt import PromptCreate, PromptUpdate
 from src.schemas.rating import RatingSubmit
@@ -10,6 +11,8 @@ from src.services import prompt_service
 from src.utils.error import NotFoundError, ConflictError, ForbiddenError
 
 router = APIRouter(tags=["prompts"])
+
+_FEATURED_CACHE_KEY = "prompts:featured"
 
 
 def _require_scope(scope: str):
@@ -35,9 +38,15 @@ def _handle(exc: NotFoundError | ConflictError | ForbiddenError):
 
 @router.get("/prompts/featured", response_model=dict)
 def list_featured(db: Session = Depends(get_db), caller=Depends(get_optional_user)):
+    cache_key = f"{_FEATURED_CACHE_KEY}:{'auth' if caller else 'anon'}"
+    cached = cache_get(cache_key)
+    if cached is not None:
+        return {"data": cached}
     prompts = prompt_service.list_featured(db, caller)
     from src.schemas.prompt import PromptSummary
-    return {"data": [PromptSummary.model_validate(p).model_dump() for p in prompts]}
+    data = [PromptSummary.model_validate(p).model_dump() for p in prompts]
+    cache_set(cache_key, data)
+    return {"data": data}
 
 
 # ── Prompts CRUD ──────────────────────────────────────────────────────────────
@@ -102,6 +111,8 @@ def create_prompt(
 ):
     try:
         p = prompt_service.create_prompt(db, data, caller)
+        cache_delete(f"{_FEATURED_CACHE_KEY}:auth")
+        cache_delete(f"{_FEATURED_CACHE_KEY}:anon")
         from src.schemas.prompt import PromptDetail
         return {"data": PromptDetail.model_validate(p).model_dump(), "meta": {"action": "created"}}
     except (NotFoundError, ConflictError, ForbiddenError) as e:
@@ -117,6 +128,8 @@ def update_prompt(
 ):
     try:
         p = prompt_service.update_prompt(db, prompt_id, data, caller)
+        cache_delete(f"{_FEATURED_CACHE_KEY}:auth")
+        cache_delete(f"{_FEATURED_CACHE_KEY}:anon")
         from src.schemas.prompt import PromptDetail
         return {"data": PromptDetail.model_validate(p).model_dump()}
     except (NotFoundError, ConflictError, ForbiddenError) as e:
