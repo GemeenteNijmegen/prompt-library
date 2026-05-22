@@ -10,4 +10,5 @@ python-multipart>=0.0.9
 cachetools>=5.3
 aiofiles>=23.2
 redis>=5.0
+psycopg2-binary>=2.9
 boto3>=1.34

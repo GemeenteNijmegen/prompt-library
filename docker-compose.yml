@@ -1,0 +1,103 @@
+# Profiles:
+#   full   – Postgres 18 + Redis 7 + app, built image  [default]
+#   dev    – same infrastructure + src volume + --reload
+#   simple – app only, SQLite, no external services
+#
+# Usage:
+#   docker compose up                    # full stack  (COMPOSE_PROFILES=full set in .env)
+#   docker compose --profile dev up      # hot-reload
+#   docker compose --profile simple up   # SQLite, single container
+
+services:
+
+  # ── Infrastructure ─────────────────────────────────────────────────────────
+
+  postgres:
+    profiles: [full, dev]
+    image: postgres:18
+    environment:
+      POSTGRES_DB: gallery
+      POSTGRES_USER: gallery
+      POSTGRES_PASSWORD: gallery
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gallery -d gallery"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    profiles: [full, dev]
+    image: redis:7
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── App: full stack (built image) ──────────────────────────────────────────
+
+  app:
+    profiles: [full]
+    build: .
+    ports:
+      - "${PORT:-8000}:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql://gallery:gallery@postgres:5432/gallery
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ── App: dev (src volume + hot-reload) ─────────────────────────────────────
+
+  app-dev:
+    profiles: [dev]
+    build: .
+    ports:
+      - "${PORT:-8000}:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql://gallery:gallery@postgres:5432/gallery
+      REDIS_URL: redis://redis:6379
+      ENVIRONMENT: development
+      LOG_LEVEL: debug
+    volumes:
+      - ./src:/app/src
+      - ./migrations:/app/migrations
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ── App: simple (SQLite, no external services) ─────────────────────────────
+
+  app-simple:
+    profiles: [simple]
+    build: .
+    ports:
+      - "${PORT:-8000}:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: sqlite:///data/gallery.db
+      REDIS_URL: ""
+    volumes:
+      - ./data:/app/data
+
+volumes:
+  postgres_data:
