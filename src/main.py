@@ -14,6 +14,7 @@ logging.basicConfig(
     level=settings.LOG_LEVEL.upper(),
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
+logging.getLogger("sqlalchemy").propagate = False
 logger = logging.getLogger(__name__)
 
 

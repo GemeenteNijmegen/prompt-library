@@ -117,6 +117,9 @@ services:
       DATABASE_URL: postgresql://gallery:gallery@postgres:5432/gallery
       REDIS_URL: redis://redis:6379
       EMBEDDING_USE_FAKE: "false"
+      FASTEMBED_CACHE_PATH: /cache/fastembed
+    volumes:
+      - fastembed_cache:/cache/fastembed
     depends_on:
       postgres:
         condition: service_healthy
@@ -125,3 +128,4 @@ services:
 
 volumes:
   postgres_data:
+  fastembed_cache:

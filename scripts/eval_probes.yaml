@@ -1,0 +1,46 @@
+# Probe queries for embedding evaluation harness.
+# Each entry: a natural-language query and the title of the prompt expected to rank #1.
+# Expand this file freely — no code changes required.
+
+- query: samenvatting maken
+  expects: "Maak een goede samenvatting"
+
+- query: summarize
+  expects: "Maak een goede samenvatting"
+
+- query: verslag van meeting transcript
+  expects: "Maak een verslag van een transcript"
+
+- query: transcription to report
+  expects: "Transcriptie naar Verslag"
+
+- query: vergadering agenda
+  expects: "Vergadering voorbereiden"
+
+- query: klacht behandeling
+  expects: "Klachtafhandeling"
+
+- query: raadsvoorstel schrijven gemeente
+  expects: "Raadsvoorstel opstellen"
+
+- query: prompt verbeteren feedback
+  expects: "Laat je prompt reviewen"
+
+# Body-text probes: queries that don't match any title word.
+# title_only should fail these; title+desc / full should succeed once
+# descriptions are meaningful and distinct from prompt_text.
+
+- query: B1 niveau ambtelijke taal herschrijven
+  expects: "Tekst vereenvoudigen"
+
+- query: Awb ontvangstbevestiging afdoeningsbrief
+  expects: "Klachtafhandeling"
+
+- query: social media nieuwsbericht gemeente
+  expects: "Communicatie naar inwoners"
+
+- query: feedbackgesprek oefenen collega rollenspel
+  expects: "Maak je eigen trainingsacteur"
+
+- query: bestuurlijke besluitvorming startnotitie evaluatie
+  expects: "Beleidsnotitie schrijven"

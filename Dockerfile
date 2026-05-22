@@ -16,11 +16,12 @@ EXPOSE 8000
 
 CMD ["sh", "-c", "alembic upgrade head && uvicorn src.main:app --host 0.0.0.0 --port 8000"]
 
-# Production image with model weights bundled — avoids HuggingFace download at boot
+# Image with real ML embeddings. Model weights are NOT baked in; they are
+# downloaded on first start and cached in the fastembed_cache Docker volume
+# (see docker-compose.yml). Rebuilds are fast; only the first ever start
+# downloads from the network.
 FROM app AS app-with-embeddings
 
 ARG EMBEDDING_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
-ENV FASTEMBED_CACHE_PATH=/root/.cache/fastembed
+ENV FASTEMBED_CACHE_PATH=/cache/fastembed
 ENV EMBEDDING_MODEL=${EMBEDDING_MODEL}
-
-RUN python3 -c "from fastembed import TextEmbedding; list(TextEmbedding('${EMBEDDING_MODEL}').embed(['warmup']))"

@@ -13,6 +13,11 @@ import os
 import sys
 from pathlib import Path
 
+# Ensure project root is on sys.path so `src` package is importable when the
+# script is invoked as `python scripts/reembed.py` (Python only adds the
+# script's own directory, not the project root, to sys.path).
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 # Load .env if present (mirror generate_key.py)
 _env_path = Path(__file__).parent.parent / ".env"
 if _env_path.exists():
