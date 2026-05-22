@@ -194,23 +194,56 @@ Embeddings are computed automatically on `POST /api/v1/prompts` (create) and on 
 
 ## Re-embedding prompts
 
-After switching `EMBEDDING_MODEL` or first deploying the embedding feature on an existing database, re-embed all prompts:
+Run `scripts/reembed.py` after switching `EMBEDDING_MODEL` or when first deploying on a database that already has prompts (to backfill missing vectors).
+
+**When to run:**
+- First deploy with embeddings on an existing database → `--only-missing`
+- After changing `EMBEDDING_MODEL` → default (re-embeds everything)
+
+The script is safe against a live database — it commits one batch at a time, holds no table locks, and is idempotent. If interrupted, re-run; at most one batch is reprocessed.
+
+### Local / virtualenv
 
 ```bash
-# Re-embed everything (model-swap case):
-python3 scripts/reembed.py
-
-# Backfill only prompts without a vector (first deploy):
+# Backfill only rows without a vector (first deploy):
 python3 scripts/reembed.py --only-missing
 
-# Preview what would happen without writing:
+# Re-embed everything (after model swap):
+python3 scripts/reembed.py
+
+# Preview without writing:
 python3 scripts/reembed.py --dry-run
 
-# Adjust batch size (default: 100):
+# Smaller batches (default: 100):
 python3 scripts/reembed.py --batch-size 50
 ```
 
-The script is safe to run against a live database — it commits one batch at a time and does not lock the table. If interrupted, re-run; it will re-process any uncommitted batch but skip no rows.
+### Docker
+
+The script runs inside the app container so it picks up the same `DATABASE_URL` and `EMBEDDING_MODEL` as the running service. Use `docker compose run` with `--no-deps` (infra is already up) and `--rm` to clean up the container afterward.
+
+```bash
+# Backfill missing vectors — typical first-deploy command:
+docker compose --profile embeddings run --no-deps --rm app-embeddings \
+  python3 scripts/reembed.py --only-missing
+
+# Re-embed everything after switching EMBEDDING_MODEL:
+docker compose --profile embeddings run --no-deps --rm app-embeddings \
+  python3 scripts/reembed.py
+
+# Dry-run to preview what would change:
+docker compose --profile embeddings run --no-deps --rm app-embeddings \
+  python3 scripts/reembed.py --dry-run
+```
+
+If you use the `full` or `simple` profile (slim image without bundled weights), set `EMBEDDING_MODEL` and ensure the model cache is mounted or `FASTEMBED_CACHE_PATH` points to a pre-populated directory:
+
+```bash
+docker compose run --no-deps --rm \
+  -e EMBEDDING_MODEL=intfloat/multilingual-e5-small \
+  -v /path/to/fastembed-cache:/root/.cache/fastembed \
+  app python3 scripts/reembed.py --only-missing
+```
 
 ## Migrations
 
