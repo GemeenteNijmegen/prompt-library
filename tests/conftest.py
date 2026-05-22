@@ -1,18 +1,24 @@
 import os
+import time
+
 import pytest
+from jose import jwt
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker, Session
 from starlette.testclient import TestClient
 
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
-os.environ.setdefault("DEV_STUB_TOKEN", "dev-token")
-os.environ.setdefault("ENVIRONMENT", "testing")
+os.environ["ENVIRONMENT"] = "testing"
+os.environ["JWT_SECRET_KEY"] = "test-secret-key"
+os.environ["JWKS_URI"] = ""
 
 from src.models import Base
 from src.main import create_app
 from src.dependencies import get_db
 
 TEST_DB_URL = "sqlite:///:memory:"
+_JWT_SECRET = "test-secret-key"
+_JWT_ISSUER = "http://localhost:9000"
 
 engine = create_engine(
     TEST_DB_URL,
@@ -29,6 +35,41 @@ def _set_pragma(dbapi_conn, _record):
 event.listen(engine, "connect", _set_pragma)
 
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+def make_jwt(
+    sub: str = "dev-user-001",
+    name: str = "Dev User",
+    email: str = "dev@example.com",
+    avatar_url: str | None = None,
+    scope: list[str] | None = None,
+    expired: bool = False,
+) -> str:
+    if scope is None:
+        scope = [
+            "prompt:read",
+            "prompt:read:restricted",
+            "prompt:create",
+            "prompt:write",
+            "prompt:publish",
+            "prompt:rate",
+            "prompt:image",
+            "admin:manage_taxonomy",
+            "admin:manage_keys",
+            "admin:manage_users",
+        ]
+    now = int(time.time())
+    payload = {
+        "sub": sub,
+        "scope": scope,
+        "name": name,
+        "email": email,
+        "avatar_url": avatar_url,
+        "iss": _JWT_ISSUER,
+        "iat": now - 10,
+        "exp": (now - 5) if expired else (now + 3600),
+    }
+    return jwt.encode(payload, _JWT_SECRET, algorithm="HS256")
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -64,7 +105,7 @@ def client(db: Session):
 
 @pytest.fixture()
 def auth_headers():
-    return {"Authorization": "Bearer dev-token"}
+    return {"Authorization": f"Bearer {make_jwt()}"}
 
 
 @pytest.fixture()

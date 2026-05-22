@@ -13,8 +13,6 @@ class Settings(BaseSettings):
     JWKS_URI: str = ""
     JWT_ISSUER: str = "http://localhost:9000"
     JWT_SECRET_KEY: str = ""
-    DEV_STUB_TOKEN: str = "dev-token"
-
     # Storage
     STORAGE_BACKEND: Literal["local", "s3"] = "local"
     STORAGE_LOCAL_PATH: str = "./uploads"

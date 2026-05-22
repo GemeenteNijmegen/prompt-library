@@ -6,6 +6,7 @@ Standalone REST API for managing, searching, and rating AI prompts. Built with F
 
 ```bash
 cp .env.example .env
+# Set JWT_SECRET_KEY in .env for dev mode
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn src.main:app --reload
@@ -20,9 +21,21 @@ pip install -r requirements-dev.txt
 pytest tests/ -v
 ```
 
-## Authentication (dev mode)
+## Authentication
 
-The stub auth dependency accepts `Authorization: Bearer dev-token` and grants all permissions. Set `DEV_STUB_TOKEN` in `.env` to change the token value.
+All protected endpoints use `Authorization: Bearer <jwt>`.
+
+**Dev / testing mode (HMAC):** Set `JWT_SECRET_KEY` in `.env` and leave `JWKS_URI` empty. Tokens are HS256-signed with the shared secret.
+
+**Production mode (JWKS):** Set `JWKS_URI` to your identity provider's JWKS endpoint. Tokens must be RS256-signed.
+
+Generate a dev machine token:
+
+```bash
+JWT_SECRET_KEY=my-secret python3 scripts/generate_key.py \
+  --scope prompt:read prompt:create \
+  --expires-in-days 365
+```
 
 ## API prefix
 
@@ -30,20 +43,24 @@ All routes are under `/api/v1/`. Health: `GET /api/v1/health`.
 
 ## Environment variables
 
-See `.env.example` for all 17 variables with documented defaults. Key ones:
-
 | Variable | Default | Purpose |
 |---|---|---|
 | `DATABASE_URL` | `sqlite:///data/gallery.db` | DB connection |
-| `DEV_STUB_TOKEN` | `dev-token` | Dev auth token |
-| `ENVIRONMENT` | `development` | Runtime mode |
-| `CORS_ORIGINS` | `http://localhost:5173` | Allowed origins |
+| `ENVIRONMENT` | `development` | `development` / `production` / `testing` |
+| `JWT_SECRET_KEY` | `` | HMAC secret for dev/test (leave unset in prod) |
+| `JWKS_URI` | `` | OIDC JWKS endpoint (prod) |
+| `JWT_ISSUER` | `http://localhost:9000` | Expected `iss` claim |
+| `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated allowed origins |
+
+See `.env.example` for the full 17-variable list.
 
 ## Endpoints summary
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | GET | `/api/v1/health` | None | Liveness + DB check |
+| GET | `/api/v1/me` | Bearer | Current user profile |
+| POST | `/api/v1/auth/generate-key` | `admin:manage_keys` | Generate machine JWT |
 | GET | `/api/v1/prompts` | Optional | List/search prompts |
 | GET | `/api/v1/prompts/featured` | Optional | Featured prompts |
 | GET | `/api/v1/prompts/{id}` | Optional | Prompt detail |
@@ -62,7 +79,6 @@ See `.env.example` for all 17 variables with documented defaults. Key ones:
 | POST | `/api/v1/tags` | `admin:manage_taxonomy` | Create tag |
 | GET | `/api/v1/tags/{id}` | None | Tag detail |
 | DELETE | `/api/v1/tags/{id}` | `admin:manage_taxonomy` | Soft-delete tag |
-| GET | `/api/v1/me` | Bearer | Current user profile |
 
 ## Status transitions
 
