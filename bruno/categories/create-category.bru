@@ -1,0 +1,22 @@
+meta {
+  name: Create category
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{base_url}}/api/v1/categories
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "name": "Writing",
+    "description": "Prompts for writing tasks"
+  }
+}

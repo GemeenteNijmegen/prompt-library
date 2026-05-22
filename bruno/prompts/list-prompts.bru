@@ -1,0 +1,24 @@
+meta {
+  name: List prompts
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{base_url}}/api/v1/prompts
+  body: none
+  auth: none
+}
+
+params:query {
+  page: 1
+  per_page: 20
+  ~search:
+  ~status:
+  ~visibility:
+  ~featured:
+  ~category_id:
+  ~tag:
+  ~sort: created_at
+  ~order: desc
+}

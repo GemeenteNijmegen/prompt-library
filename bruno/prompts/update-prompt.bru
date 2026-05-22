@@ -1,0 +1,21 @@
+meta {
+  name: Update prompt
+  type: http
+  seq: 5
+}
+
+patch {
+  url: {{base_url}}/api/v1/prompts/1
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "title": "Updated title"
+  }
+}

@@ -1,0 +1,21 @@
+meta {
+  name: Create tag
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{base_url}}/api/v1/tags
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "name": "summarisation"
+  }
+}

@@ -1,0 +1,28 @@
+meta {
+  name: Create prompt
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{base_url}}/api/v1/prompts
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "title": "Summarise an article",
+    "description": "Concise summary of any article in 3 bullet points",
+    "prompt_text": "Summarise the following article in exactly 3 bullet points:\n\n{{article}}",
+    "status": "draft",
+    "visibility": "public",
+    "featured": false,
+    "category_ids": [],
+    "tag_names": ["summarisation", "writing"]
+  }
+}

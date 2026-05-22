@@ -1,0 +1,21 @@
+meta {
+  name: Submit rating
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{base_url}}/api/v1/prompts/1/rate
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "rating": 4
+  }
+}

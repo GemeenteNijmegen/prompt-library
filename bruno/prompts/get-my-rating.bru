@@ -1,0 +1,15 @@
+meta {
+  name: Get my rating
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{base_url}}/api/v1/prompts/1/rate
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}

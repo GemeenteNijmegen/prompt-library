@@ -1,0 +1,22 @@
+meta {
+  name: Update category
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{base_url}}/api/v1/categories/1
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{token}}
+}
+
+body:json {
+  {
+    "name": "Updated name",
+    "description": "Updated description"
+  }
+}
