@@ -8,7 +8,7 @@ from src.dependencies import get_db, get_current_user, get_optional_user
 from src.schemas.prompt import PromptCreate, PromptUpdate
 from src.schemas.rating import RatingSubmit
 from src.services import prompt_service
-from src.utils.error import NotFoundError, ConflictError, ForbiddenError
+from src.utils.error import NotFoundError, ConflictError, ForbiddenError, EmbedError
 
 router = APIRouter(tags=["prompts"])
 
@@ -26,10 +26,10 @@ def _require_scope(scope: str):
     return dep
 
 
-def _handle(exc: NotFoundError | ConflictError | ForbiddenError):
-    codes = {NotFoundError: 404, ConflictError: 409, ForbiddenError: 403}
+def _handle(exc: NotFoundError | ConflictError | ForbiddenError | EmbedError):
+    codes = {NotFoundError: 404, ConflictError: 409, ForbiddenError: 403, EmbedError: 500}
     raise HTTPException(
-        status_code=codes[type(exc)],
+        status_code=codes.get(type(exc), exc.http_status),
         detail={"error": {"code": exc.code, "message": exc.message}},
     )
 
@@ -115,7 +115,7 @@ def create_prompt(
         cache_delete(f"{_FEATURED_CACHE_KEY}:anon")
         from src.schemas.prompt import PromptDetail
         return {"data": PromptDetail.model_validate(p).model_dump(), "meta": {"action": "created"}}
-    except (NotFoundError, ConflictError, ForbiddenError) as e:
+    except (NotFoundError, ConflictError, ForbiddenError, EmbedError) as e:
         _handle(e)
 
 
@@ -132,7 +132,7 @@ def update_prompt(
         cache_delete(f"{_FEATURED_CACHE_KEY}:anon")
         from src.schemas.prompt import PromptDetail
         return {"data": PromptDetail.model_validate(p).model_dump()}
-    except (NotFoundError, ConflictError, ForbiddenError) as e:
+    except (NotFoundError, ConflictError, ForbiddenError, EmbedError) as e:
         _handle(e)
 
 

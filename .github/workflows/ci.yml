@@ -25,3 +25,4 @@ jobs:
         env:
           ENVIRONMENT: testing
           JWT_SECRET_KEY: ci-secret
+          EMBEDDING_USE_FAKE: "true"

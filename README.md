@@ -24,7 +24,7 @@ docker-compose up
 
 This starts the API, PostgreSQL, and Redis. Configuration is read from `.env`.
 
-There are two additional docker compose profiles:
+There are three additional docker compose profiles:
 
 For hot-reloading dev-setup:
 
@@ -38,14 +38,27 @@ If you just want to run the prompt gallery:
 docker-compose up --profile simple
 ```
 
+For real semantic search with the bundled ML model (requires building `app-with-embeddings`):
+
+```
+docker-compose --profile embeddings up
+```
+
+This starts Postgres, Redis, and the `app-with-embeddings` image which has `intfloat/multilingual-e5-small` weights pre-baked in. The default (`full`) profile uses the slim image with `EMBEDDING_USE_FAKE=false` (fastembed downloads on first use if model is not cached).
+
 Build and run the image directly:
 
 ```bash
-docker build -t prompt-gallery .
+# Slim image (no bundled model weights):
+docker build --target app -t prompt-gallery .
+
+# Production image (model weights bundled):
+docker build --target app-with-embeddings -t prompt-gallery-full .
+
 docker run -p 8000:8000 prompt-gallery
 ```
 
-The image is automatically published on each release. See GitHub Actions workflow for registry details.
+The `app-with-embeddings` image is automatically published to GHCR on each release. The slim `app` image is used for CI tests. See GitHub Actions workflow for registry details.
 
 ## Running tests
 
@@ -96,6 +109,8 @@ All routes are under `/api/v1/`. Health: `GET /api/v1/health`.
 | `RATE_LIMIT_MACHINE`   | `300`                       | Requests/min for machine tokens                                    |
 | `MAX_UPLOAD_SIZE`      | `5242880`                   | Max upload file size in bytes (default: 5 MB)                      |
 | `LOG_LEVEL`            | `info`                      | Log verbosity: `debug`, `info`, `warning`, `error`                 |
+| `EMBEDDING_MODEL`      | `intfloat/multilingual-e5-small` | Sentence embedding model for semantic search                  |
+| `EMBEDDING_USE_FAKE`   | `false`                     | Use deterministic fake embedder (for dev/test; always set in CI)   |
 
 See `.env.example` for the full variable list.
 
@@ -166,6 +181,36 @@ with open('openapi/openapi.json', 'w') as f:
 ## Caching
 
 `GET /api/v1/prompts/featured`, `GET /api/v1/categories`, and `GET /api/v1/tags` are cached with a 60-second TTL. The cache is invalidated on any write to the affected resource. Set `REDIS_URL` to use Redis instead of the default in-process `cachetools.TTLCache`.
+
+## Semantic search
+
+`GET /api/v1/prompts?search=<query>` uses hybrid search: keyword ILIKE over title/description/prompt_text fused with vector cosine similarity via Reciprocal Rank Fusion (RRF). Prompts with a `NULL` embedding vector are still findable via the keyword half.
+
+Embeddings are computed automatically on `POST /api/v1/prompts` (create) and on `PATCH /api/v1/prompts/{id}` when the embedding source text (title, description, or prompt_text) changes.
+
+**Slim image / dev:** Set `EMBEDDING_USE_FAKE=true` to use the deterministic `FakeEmbedder` (no ML model needed). Search still works but rankings are random.
+
+**Production image:** The published `app-with-embeddings` image bundles `intfloat/multilingual-e5-small` (384-dim, multilingual). Override `EMBEDDING_MODEL` to use a different model — but note that switching models requires re-embedding all prompts (see below).
+
+## Re-embedding prompts
+
+After switching `EMBEDDING_MODEL` or first deploying the embedding feature on an existing database, re-embed all prompts:
+
+```bash
+# Re-embed everything (model-swap case):
+python3 scripts/reembed.py
+
+# Backfill only prompts without a vector (first deploy):
+python3 scripts/reembed.py --only-missing
+
+# Preview what would happen without writing:
+python3 scripts/reembed.py --dry-run
+
+# Adjust batch size (default: 100):
+python3 scripts/reembed.py --batch-size 50
+```
+
+The script is safe to run against a live database — it commits one batch at a time and does not lock the table. If interrupted, re-run; it will re-process any uncommitted batch but skip no rows.
 
 ## Migrations
 

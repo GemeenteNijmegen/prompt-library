@@ -1,12 +1,14 @@
 # Profiles:
-#   full   – Postgres 18 + Redis 7 + app, built image  [default]
-#   dev    – same infrastructure + src volume + --reload
-#   simple – app only, SQLite, no external services
+#   full       – Postgres 18 + Redis 7 + app, built image  [default]
+#   dev        – same infrastructure + src volume + --reload
+#   simple     – app only, SQLite, no external services
+#   embeddings – full stack using app-with-embeddings image (real ML model bundled)
 #
 # Usage:
-#   docker compose up                    # full stack  (COMPOSE_PROFILES=full set in .env)
-#   docker compose --profile dev up      # hot-reload
-#   docker compose --profile simple up   # SQLite, single container
+#   docker compose up                         # full stack  (COMPOSE_PROFILES=full set in .env)
+#   docker compose --profile dev up           # hot-reload
+#   docker compose --profile simple up        # SQLite, single container
+#   docker compose --profile embeddings up    # bundled model, real semantic search
 
 services:
 
@@ -98,6 +100,28 @@ services:
       REDIS_URL: ""
     volumes:
       - ./data:/app/data
+
+  # ── App: embeddings (bundled ML model for real semantic search) ────────────
+
+  app-embeddings:
+    profiles: [embeddings]
+    build:
+      context: .
+      target: app-with-embeddings
+    ports:
+      - "${PORT:-8000}:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql://gallery:gallery@postgres:5432/gallery
+      REDIS_URL: redis://redis:6379
+      EMBEDDING_USE_FAKE: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
 volumes:
   postgres_data:

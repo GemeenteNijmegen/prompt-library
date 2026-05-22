@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     # Upload
     MAX_UPLOAD_SIZE: int = 5_242_880  # 5 MB
 
+    # Embeddings
+    EMBEDDING_MODEL: str = "intfloat/multilingual-e5-small"
+    EMBEDDING_USE_FAKE: bool = False
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def parse_cors_origins(cls, v: str) -> str:

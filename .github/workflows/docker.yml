@@ -34,10 +34,11 @@ jobs:
             type=sha,prefix=,format=short
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
-      - name: Build and push
+      - name: Build and push (app-with-embeddings)
         uses: docker/build-push-action@v5
         with:
           context: .
+          target: app-with-embeddings
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

@@ -65,6 +65,12 @@ src/
 │   ├── auth.py          # GET /me, POST /auth/generate-key
 │   └── uploads.py       # POST/DELETE /uploads/images
 │
+├── embeddings/          # Semantic embedding layer
+│   ├── base.py          # Embedder Protocol: embed_passage, embed_query, dimension
+│   ├── fake.py          # FakeEmbedder: deterministic 384-dim unit vectors (dev/test)
+│   ├── fastembed_embedder.py  # FastembedEmbedder: lazy-loaded real model via fastembed
+│   └── __init__.py      # get_embedder() factory (EMBEDDING_USE_FAKE / EMBEDDING_MODEL)
+│
 ├── storage/             # Pluggable file storage
 │   ├── base.py          # StorageBackend Protocol
 │   ├── local.py         # LocalFileSystemBackend (dev/test)
@@ -73,6 +79,7 @@ src/
 │
 ├── services/            # Business logic (no HTTP concerns)
 │   ├── prompt_service.py    # CRUD, status transitions, ratings, featured
+│   │                        # + embed on create/PATCH, hybrid search, vector cache
 │   └── taxonomy_service.py  # Categories, tags, get_or_create_tags
 │
 └── utils/
@@ -82,7 +89,8 @@ src/
     └── error.py         # AppError hierarchy, raise_http()
 
 scripts/
-└── generate_key.py      # CLI: generate machine JWT from JWT_SECRET_KEY
+├── generate_key.py      # CLI: generate machine JWT from JWT_SECRET_KEY
+└── reembed.py           # CLI: re-embed all prompts (after model swap or first deploy)
 ```
 
 ## Key design decisions
@@ -102,6 +110,10 @@ scripts/
 | Tags | Auto-created on prompt create/update via `get_or_create_tags`; names lowercased | Flexible without admin overhead |
 | Visibility | `public` / `internal` / `restricted`; unauthenticated callers see only `public+published` | Layered access without complex RBAC |
 | Database | SQLite (dev/test), PostgreSQL (prod); `embedding_vector` stored as TEXT in SQLite | Alembic migration can add JSONB guard for Postgres |
+| Semantic search | Hybrid: ILIKE keyword + brute-force cosine over in-process matrix cache; fused via RRF (k=60) | See ADR-0001; no pgvector needed at this corpus size |
+| Embeddings | `intfloat/multilingual-e5-small` (384-dim) via `fastembed`; Protocol-based so model is swappable via `EMBEDDING_MODEL` | Dutch+English gallery content; multilingual model chosen per ADR-0002 |
+| Vector cache | Module-level `dict[int, np.ndarray]` with 60s TTL; loaded lazily on first search; invalidated on same-process writes | Matches TTL pattern of featured/categories/tags cache |
+| Embed on write | `create_prompt` always embeds; `update_prompt` re-embeds only when title/description/prompt_text changes | Avoid re-embedding on metadata-only PATCH (e.g., `featured`, `visibility`) |
 | Response envelope | All responses wrapped: `{"data": ...}` or `{"data": ..., "meta": {...}}` | Consistent for all consumers |
 
 ## Auth flow
@@ -145,6 +157,34 @@ prompt_ratings
   UNIQUE (prompt_id, user_id)
 ```
 
+## Embedding flow
+
+```
+POST /api/v1/prompts
+  ↓
+create_prompt (service)
+  ├── embed_passage(title + "\n\n" + description + "\n\n" + prompt_text)
+  │     embedder = get_embedder()  # FakeEmbedder in test/dev; FastembedEmbedder in prod
+  ├── Store vector as JSON in embedding_vector column
+  ├── Commit row (transactionally — embed failure blocks write)
+  └── Invalidate in-process vector cache
+
+PATCH /api/v1/prompts/{id}
+  ↓
+update_prompt (service)
+  ├── Compute old_source / new_source from pre/post field state
+  ├── If sources differ → re-embed (same transactional guarantee)
+  └── If no change → skip re-embed, do NOT invalidate cache
+
+GET /api/v1/prompts?search=<query>
+  ↓
+list_prompts (service)
+  ├── Keyword path: ILIKE filter over (title, description, prompt_text)
+  ├── Vector path: load matrix cache (60s TTL) → cosine sim → top-50
+  ├── RRF fusion: score = Σ 1/(60 + rank) across both lists
+  └── Paginate fused results; visibility filters applied before scoring
+```
+
 ## Testing approach
 
 - In-memory SQLite per test run (`scope="session"`)
@@ -153,3 +193,4 @@ prompt_ratings
 - JWT fixtures: `make_jwt()` in `conftest.py` — HS256 signed with `JWT_SECRET_KEY="test-secret-key"`
 - No mocks for DB — tests hit real service + DB layer
 - JWKS endpoint mocked with `monkeypatch`/`unittest.mock` in `test_jwt_utils.py`
+- Embeddings: `EMBEDDING_USE_FAKE=true` in conftest ensures `FakeEmbedder` is always used; vector cache reset between tests via `reset_vector_cache` autouse fixture

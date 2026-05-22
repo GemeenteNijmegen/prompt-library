@@ -11,6 +11,7 @@ os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 os.environ["ENVIRONMENT"] = "testing"
 os.environ["JWT_SECRET_KEY"] = "test-secret-key"
 os.environ["JWKS_URI"] = ""
+os.environ["EMBEDDING_USE_FAKE"] = "true"
 
 from src.models import Base
 from src.main import create_app
@@ -80,6 +81,14 @@ def create_tables():
     Base.metadata.create_all(bind=engine)
     yield
     Base.metadata.drop_all(bind=engine)
+
+
+@pytest.fixture(autouse=True)
+def reset_vector_cache():
+    from src.services import prompt_service
+    prompt_service._invalidate_vector_cache()
+    yield
+    prompt_service._invalidate_vector_cache()
 
 
 @pytest.fixture()

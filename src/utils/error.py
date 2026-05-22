@@ -34,6 +34,11 @@ class ValidationAppError(AppError):
         super().__init__("VALIDATION_ERROR", message, status.HTTP_400_BAD_REQUEST)
 
 
+class EmbedError(AppError):
+    def __init__(self, message: str):
+        super().__init__("EMBED_ERROR", message, status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 def raise_http(error: AppError) -> None:
     raise HTTPException(
         status_code=error.http_status,
