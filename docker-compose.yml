@@ -15,7 +15,7 @@ services:
   # ── Infrastructure ─────────────────────────────────────────────────────────
 
   postgres:
-    profiles: [full, dev]
+    profiles: [full, dev, embeddings]
     image: postgres:18
     environment:
       POSTGRES_DB: gallery
@@ -31,7 +31,7 @@ services:
       start_period: 10s
 
   redis:
-    profiles: [full, dev]
+    profiles: [full, dev, embeddings]
     image: redis:7
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
