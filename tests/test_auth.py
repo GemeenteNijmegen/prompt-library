@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import time
 
 import pytest
@@ -124,7 +125,7 @@ def test_cli_generate_key(tmp_path):
         capture_output=True,
         text=True,
         env={**os.environ, "JWT_SECRET_KEY": _SECRET, "JWT_ISSUER": _ISSUER},
-        cwd="/workspace/projects/prompt-gallery",
+        cwd=Path(__file__).parent.parent,
     )
     assert result.returncode == 0
     token = result.stdout.strip()
