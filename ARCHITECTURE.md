@@ -68,6 +68,7 @@ src/
 ├── storage/             # Pluggable file storage
 │   ├── base.py          # StorageBackend Protocol
 │   ├── local.py         # LocalFileSystemBackend (dev/test)
+│   ├── s3.py            # S3Backend (production; requires boto3 + S3_* env vars)
 │   └── __init__.py      # Factory: reads STORAGE_BACKEND env var
 │
 ├── services/            # Business logic (no HTTP concerns)
