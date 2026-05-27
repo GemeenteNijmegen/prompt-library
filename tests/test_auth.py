@@ -1,5 +1,4 @@
 import os
-from pathlib import Path
 import time
 
 import pytest
@@ -10,14 +9,14 @@ os.environ["ENVIRONMENT"] = "testing"
 os.environ["JWT_SECRET_KEY"] = "test-secret-key"
 os.environ["JWKS_URI"] = ""
 
-from tests.conftest import make_jwt
+from tests.conftest import make_jwt, TEST_ORG_ID, TEST_AZP
 
 _SECRET = "test-secret-key"
 _ISSUER = "http://localhost:9000"
 
 
 # ---------------------------------------------------------------------------
-# GET /api/v1/me — issue #11
+# GET /api/v1/me
 # ---------------------------------------------------------------------------
 
 def test_me_authenticated(client):
@@ -57,7 +56,6 @@ def test_me_last_seen_at_updated(client):
     assert r2.status_code == 200
     ts2 = r2.json()["data"]["last_seen_at"]
 
-    # last_seen_at should be updated (or at minimum present)
     assert ts2 >= ts1
 
 
@@ -66,71 +64,28 @@ def test_me_invalid_token(client):
     assert r.status_code == 401
 
 
-# ---------------------------------------------------------------------------
-# POST /api/v1/auth/generate-key — issue #12
-# ---------------------------------------------------------------------------
+def test_me_upserts_org_id(client):
+    """Auth middleware persists org_id from JWT into the users table."""
+    token = make_jwt(org_id=TEST_ORG_ID)
+    r = client.get("/api/v1/me", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 200
 
-def test_generate_key_with_manage_keys_scope(client):
-    token = make_jwt(scope=["admin:manage_keys"])
-    r = client.post(
-        "/api/v1/auth/generate-key",
-        json={"scope": ["prompt:read", "prompt:create"], "expires_in_days": 365},
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert r.status_code == 201
-    data = r.json()["data"]
-    assert "token" in data
-    assert "expires_at" in data
-    assert data["scope"] == ["prompt:read", "prompt:create"]
-
-
-def test_generate_key_token_is_verifiable(client):
-    from src.utils.jwt_utils import decode_and_verify
-
-    token = make_jwt(scope=["admin:manage_keys"])
-    r = client.post(
-        "/api/v1/auth/generate-key",
-        json={"scope": ["prompt:read"], "expires_in_days": 30},
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert r.status_code == 201
-    machine_token = r.json()["data"]["token"]
-    claims = decode_and_verify(machine_token)
-    assert "prompt:read" in claims["scope"]
+    from src.models.user import User
+    from tests.conftest import TestingSessionLocal
+    db = TestingSessionLocal()
+    try:
+        user = db.query(User).filter(User.external_id == "dev-user-001").first()
+        assert user is not None
+        assert user.org_id == TEST_ORG_ID
+    finally:
+        db.close()
 
 
-def test_generate_key_forbidden_without_scope(client):
-    token = make_jwt(scope=["prompt:read"])
+def test_generate_key_endpoint_removed(client):
+    """Ensure the old HS256 signing endpoint is gone (epic §9)."""
     r = client.post(
         "/api/v1/auth/generate-key",
         json={"scope": ["prompt:read"], "expires_in_days": 365},
-        headers={"Authorization": f"Bearer {token}"},
+        headers={"Authorization": f"Bearer {make_jwt()}"},
     )
-    assert r.status_code == 403
-    assert r.json()["detail"]["error"]["code"] == "FORBIDDEN"
-
-
-def test_generate_key_requires_auth(client):
-    r = client.post(
-        "/api/v1/auth/generate-key",
-        json={"scope": ["prompt:read"], "expires_in_days": 365},
-    )
-    assert r.status_code == 401
-
-
-def test_cli_generate_key(tmp_path):
-    import subprocess
-    result = subprocess.run(
-        ["python3", "scripts/generate_key.py", "--scope", "prompt:read", "prompt:create", "--expires-in-days", "30"],
-        capture_output=True,
-        text=True,
-        env={**os.environ, "JWT_SECRET_KEY": _SECRET, "JWT_ISSUER": _ISSUER},
-        cwd=Path(__file__).parent.parent,
-    )
-    assert result.returncode == 0
-    token = result.stdout.strip()
-    assert token
-
-    claims = jwt.decode(token, _SECRET, algorithms=["HS256"], options={"verify_aud": False})
-    assert "prompt:read" in claims["scope"]
-    assert "prompt:create" in claims["scope"]
+    assert r.status_code == 404

@@ -20,6 +20,9 @@ from src.dependencies import get_db
 TEST_DB_URL = "sqlite:///:memory:"
 _JWT_SECRET = "test-secret-key"
 _JWT_ISSUER = "http://localhost:9000"
+_JWT_AUDIENCE = "prompt-gallery-api"
+TEST_ORG_ID = "test-org-001"
+TEST_AZP = "test-client"
 
 engine = create_engine(
     TEST_DB_URL,
@@ -43,9 +46,10 @@ def make_jwt(
     name: str = "Dev User",
     email: str = "dev@example.com",
     avatar_url: str | None = None,
+    org_id: str = TEST_ORG_ID,
+    azp: str = TEST_AZP,
     scope: list[str] | None = None,
     expired: bool = False,
-    machine: bool = False,
 ) -> str:
     if scope is None:
         scope = [
@@ -54,15 +58,21 @@ def make_jwt(
             "prompt:create",
             "prompt:write",
             "prompt:publish",
+            "prompt:publish:public",
             "prompt:rate",
             "prompt:image",
+            "prompt:moderate",
+            "apikey:create",
             "admin:manage_taxonomy",
-            "admin:manage_keys",
             "admin:manage_users",
+            "admin:read_audit",
         ]
     now = int(time.time())
     payload = {
         "sub": sub,
+        "org_id": org_id,
+        "azp": azp,
+        "aud": _JWT_AUDIENCE,
         "scope": scope,
         "name": name,
         "email": email,
@@ -71,8 +81,6 @@ def make_jwt(
         "iat": now - 10,
         "exp": (now - 120) if expired else (now + 3600),  # 120 s exceeds the 60 s leeway
     }
-    if machine:
-        payload["token_type"] = "machine"
     return jwt.encode(payload, _JWT_SECRET, algorithm="HS256")
 
 
@@ -125,7 +133,12 @@ def dev_user(db: Session):
     from src.models.user import User
     user = db.query(User).filter(User.external_id == "dev-user-001").first()
     if not user:
-        user = User(external_id="dev-user-001", name="Dev User", email="dev@example.com")
+        user = User(
+            external_id="dev-user-001",
+            org_id=TEST_ORG_ID,
+            name="Dev User",
+            email="dev@example.com",
+        )
         db.add(user)
         db.commit()
         db.refresh(user)
@@ -159,7 +172,7 @@ def sample_prompt(db: Session, dev_user):
         title="Sample Prompt",
         description="A sample description",
         prompt_text="Write something about {topic}",
-        status="published_org",
+        status="published_public",
         visibility="public",
         featured=False,
         creator_id=dev_user.id,

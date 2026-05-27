@@ -64,13 +64,13 @@ def test_use_prompt(client, sample_prompt):
     assert r.status_code == 204
 
 
-def test_list_featured(client, db, dev_user):
+def test_list_featured(client, auth_headers, db, dev_user):
     from src.models.prompt import Prompt
     p = Prompt(
         title="Featured Prompt",
         description="desc",
         prompt_text="text",
-        status="published_org",
+        status="published_public",
         visibility="public",
         featured=True,
         creator_id=dev_user.id,
@@ -78,6 +78,7 @@ def test_list_featured(client, db, dev_user):
     db.add(p)
     db.commit()
 
+    # Anonymous callers see published_public featured prompts
     r = client.get("/api/v1/prompts/featured")
     assert r.status_code == 200
     titles = [item["title"] for item in r.json()["data"]]
