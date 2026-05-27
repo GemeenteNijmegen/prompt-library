@@ -929,7 +929,7 @@
     "/api/v1/me": {
       "get": {
         "tags": [
-          "auth"
+          "me"
         ],
         "summary": "Get Me",
         "operationId": "get_me_api_v1_me_get",
@@ -942,54 +942,6 @@
                   "additionalProperties": true,
                   "type": "object",
                   "title": "Response Get Me Api V1 Me Get"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/auth/generate-key": {
-      "post": {
-        "tags": [
-          "auth"
-        ],
-        "summary": "Generate Key",
-        "operationId": "generate_key_api_v1_auth_generate_key_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/GenerateKeyRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Generate Key Api V1 Auth Generate Key Post"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -1159,27 +1111,6 @@
         "type": "object",
         "title": "CategoryUpdate"
       },
-      "GenerateKeyRequest": {
-        "properties": {
-          "scope": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Scope"
-          },
-          "expires_in_days": {
-            "type": "integer",
-            "title": "Expires In Days",
-            "default": 365
-          }
-        },
-        "type": "object",
-        "required": [
-          "scope"
-        ],
-        "title": "GenerateKeyRequest"
-      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1237,7 +1168,8 @@
             "type": "string",
             "enum": [
               "draft",
-              "published",
+              "published_org",
+              "published_public",
               "archived"
             ],
             "title": "Status",
@@ -1346,7 +1278,8 @@
                 "type": "string",
                 "enum": [
                   "draft",
-                  "published",
+                  "published_org",
+                  "published_public",
                   "archived"
                 ]
               },
