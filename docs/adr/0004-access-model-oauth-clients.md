@@ -109,6 +109,17 @@ The gallery's `POST /api/v1/me/api-keys` flow (personal keys):
 
 The gallery itself does not sign tokens. The legacy `/api/v1/auth/generate-key` endpoint that signed HS256 JWTs with a local secret is removed; the dev-mode HMAC fallback in `src/utils/jwt_utils.py` is retained for tests and local development without Keycloak running, but is hard-blocked in production via `ENVIRONMENT=production`.
 
+## Logout-everywhere (panic button)
+
+`POST /api/v1/me/logout-everywhere` is a single call that terminates all of the calling End User's active sessions:
+
+1. Call Keycloak admin API `DELETE /admin/realms/{realm}/users/{user-id}/sessions` to invalidate all interactive sessions (the `user-id` is the Keycloak user UUID = the `sub` claim stored as `external_id`).
+2. Iterate the caller's active API-key metadata rows and revoke each via `DELETE /admin/realms/{realm}/sessions/{session-id}` (the same per-session revocation path used by `DELETE /me/api-keys/{id}`), then mark each row revoked in the gallery DB.
+3. Return 204 on full success; write a `logout_everywhere` audit event.
+4. On partial Keycloak failure (any single call fails): log all failures, return 502 with a structured error listing what failed. Successfully revoked keys are still marked revoked — the caller should retry or contact Gallery Operators.
+
+No confirmation step is included in the API; confirmation is handled by the SPA before the call is made.
+
 ## Implications for the gallery code
 
 Concrete changes against the current code:

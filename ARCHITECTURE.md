@@ -146,6 +146,26 @@ Error mapping:
 - Missing token on required endpoint → 401 `UNAUTHORIZED`
 - Missing token on optional endpoint → anonymous (`None`)
 
+### Logout-everywhere flow
+
+`POST /api/v1/me/logout-everywhere` terminates all active sessions for the calling user in a single call:
+
+```
+POST /me/logout-everywhere (authenticated)
+  ↓
+KeycloakClient.logout_all_sessions(external_id)
+  → DELETE /admin/realms/{realm}/users/{sub}/sessions   [all interactive sessions]
+  ↓
+For each active api_keys row:
+  KeycloakClient.revoke_session(keycloak_session_id)
+  → DELETE /admin/realms/{realm}/sessions/{session_id}  [offline token session]
+  → api_keys.revoked_at = now
+  ↓
+Any Keycloak failure?
+  ├── Yes → log failures, return 502 KEYCLOAK_ERROR (partial revocations committed)
+  └── No  → write audit event (entity=user, action=logout_everywhere), return 204
+```
+
 ## Data model
 
 ```

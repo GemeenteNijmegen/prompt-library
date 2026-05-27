@@ -1,6 +1,9 @@
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
+
+_log = logging.getLogger(__name__)
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -98,6 +101,63 @@ def list_api_keys(
         .all()
     )
     return {"data": [ApiKeyMetadata.model_validate(k).model_dump() for k in keys]}
+
+
+@router.post("/me/logout-everywhere", status_code=status.HTTP_204_NO_CONTENT)
+def logout_everywhere(
+    caller=Depends(get_current_user),
+    db: Session = Depends(get_db),
+    kc: KeycloakClient = Depends(get_keycloak_client),
+):
+    failures: list[str] = []
+
+    # 1. Invalidate all interactive Keycloak sessions for this user.
+    try:
+        kc.logout_all_sessions(caller.external_id)
+    except KeycloakError as exc:
+        _log.error("logout-everywhere: sessions call failed user=%s err=%s", caller.id, exc)
+        failures.append(f"session logout: {exc}")
+
+    # 2. Revoke all active API keys via Keycloak and mark them revoked in DB.
+    active_keys = (
+        db.query(ApiKey)
+        .filter(ApiKey.user_id == caller.id, ApiKey.revoked_at.is_(None))
+        .all()
+    )
+    now = datetime.now(timezone.utc)
+    for key in active_keys:
+        try:
+            kc.revoke_session(key.keycloak_session_id)
+        except KeycloakError as exc:
+            _log.error(
+                "logout-everywhere: key revocation failed key_id=%s err=%s", key.id, exc
+            )
+            failures.append(f"api_key {key.id}: {exc}")
+            continue
+        key.revoked_at = now
+
+    if active_keys:
+        db.commit()
+
+    if failures:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={
+                "error": {
+                    "code": "KEYCLOAK_ERROR",
+                    "message": "logout-everywhere partially failed",
+                    "failures": failures,
+                }
+            },
+        )
+
+    write_event(
+        db,
+        entity_type="user",
+        entity_id=str(caller.id),
+        action="logout_everywhere",
+        caller=caller,
+    )
 
 
 @router.delete("/me/api-keys/{key_id}", status_code=status.HTTP_204_NO_CONTENT)
