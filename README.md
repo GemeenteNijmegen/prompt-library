@@ -69,19 +69,11 @@ pytest tests/ -v
 
 ## Authentication
 
-All protected endpoints use `Authorization: Bearer <jwt>`.
+All protected endpoints use `Authorization: Bearer <jwt>`. See ADR 0003 (identity provider: Keycloak) and ADR 0004 (access model) for the full design.
 
-**Dev / testing mode (HMAC):** Set `JWT_SECRET_KEY` in `.env` and leave `JWKS_URI` empty. Tokens are HS256-signed with the shared secret.
+**Production mode (Keycloak / JWKS):** Set `JWKS_URI` to the realm's JWKS endpoint (`https://<keycloak-host>/realms/<realm>/protocol/openid-connect/certs`), `JWT_ISSUER` to the realm URL (`https://<keycloak-host>/realms/<realm>`), and `JWT_AUDIENCE` to the configured resource-server audience (default `prompt-gallery-api`). Tokens must be RS256-signed.
 
-**Production mode (JWKS):** Set `JWKS_URI` to your identity provider's JWKS endpoint. Tokens must be RS256-signed.
-
-Generate a dev machine token:
-
-```bash
-JWT_SECRET_KEY=my-secret python3 scripts/generate_key.py \
-  --scope prompt:read prompt:create \
-  --expires-in-days 365
-```
+**Dev / testing mode (HMAC):** Set `JWT_SECRET_KEY` in `.env` and leave `JWKS_URI` empty. Tokens are HS256-signed with the shared secret. Hard-blocked when `ENVIRONMENT=production`.
 
 ## API prefix
 
@@ -93,10 +85,13 @@ All routes are under `/api/v1/`. Health: `GET /api/v1/health`.
 | ---------------------- | --------------------------- | ------------------------------------------------------------------ |
 | `DATABASE_URL`         | `sqlite:///data/gallery.db` | DB connection                                                      |
 | `ENVIRONMENT`          | `development`               | `development` / `production` / `testing`                           |
-| `JWT_SECRET_KEY`       | ``                          | HMAC secret for dev/test (leave unset in prod)                     |
-| `JWKS_URI`             | ``                          | OIDC JWKS endpoint (prod)                                          |
-| `JWT_ISSUER`           | `http://localhost:9000`     | Expected `iss` claim                                               |
-| `CORS_ORIGINS`         | `http://localhost:5173`     | Comma-separated allowed origins                                    |
+| `JWT_SECRET_KEY`       | ``                          | HMAC secret for dev/test (leave unset in prod; hard-blocked in production)             |
+| `JWKS_URI`             | ``                          | OIDC JWKS endpoint (prod). Keycloak: `…/realms/<realm>/protocol/openid-connect/certs`  |
+| `JWT_ISSUER`           | ``                          | Expected `iss` claim. Keycloak: `…/realms/<realm>` (no trailing slash). Required in prod. |
+| `JWT_AUDIENCE`         | `prompt-gallery-api`        | Expected `aud` claim; gallery enforces strict containment                              |
+| `JWKS_CACHE_TTL_SECONDS` | `3600`                    | How long fetched JWKS is cached; unknown `kid` forces a one-shot refetch               |
+| `JWT_LEEWAY_SECONDS`   | `60`                        | Clock-skew tolerance for `exp`/`nbf` checks                                            |
+| `CORS_ORIGINS`         | `http://localhost:5173`     | Comma-separated allowed origins (gallery SPA only; org-deployed chat clients are server-to-server and don't need CORS) |
 | `STORAGE_BACKEND`      | `local`                     | `local` or `s3`                                                    |
 | `STORAGE_LOCAL_PATH`   | `./uploads`                 | Local file upload directory                                        |
 | `S3_BUCKET`            | ``                          | S3 bucket name (when `STORAGE_BACKEND=s3`)                         |
@@ -104,9 +99,10 @@ All routes are under `/api/v1/`. Health: `GET /api/v1/health`.
 | `S3_ACCESS_KEY`        | ``                          | AWS access key                                                     |
 | `S3_SECRET_KEY`        | ``                          | AWS secret key                                                     |
 | `REDIS_URL`            | ``                          | Redis URL for caching (optional; uses in-memory TTLCache if unset) |
-| `RATE_LIMIT_ANONYMOUS` | `30`                        | Requests/min for unauthenticated callers                           |
-| `RATE_LIMIT_USER`      | `120`                       | Requests/min for authenticated users                               |
-| `RATE_LIMIT_MACHINE`   | `300`                       | Requests/min for machine tokens                                    |
+| `RATE_LIMIT_ANONYMOUS` | `30`                        | Requests/min per IP for unauthenticated callers                    |
+| `RATE_LIMIT_USER`      | `120`                       | Requests/min per End User (`sub`)                                  |
+| `RATE_LIMIT_CLIENT`    | `600`                       | Requests/min per OAuth client (`azp`)                              |
+| `RATE_LIMIT_ORG`       | `1200`                      | Requests/min per Organisation (`org_id`)                           |
 | `MAX_UPLOAD_SIZE`      | `5242880`                   | Max upload file size in bytes (default: 5 MB)                      |
 | `LOG_LEVEL`            | `info`                      | Log verbosity: `debug`, `info`, `warning`, `error`                 |
 | `EMBEDDING_MODEL`      | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` | Sentence embedding model for semantic search                  |
@@ -120,7 +116,9 @@ See `.env.example` for the full variable list.
 | ------ | ------------------------------ | ----------------------- | ------------------------------------- |
 | GET    | `/api/v1/health`               | None                    | Liveness + DB check                   |
 | GET    | `/api/v1/me`                   | Bearer                  | Current user profile                  |
-| POST   | `/api/v1/auth/generate-key`    | `admin:manage_keys`     | Generate machine JWT                  |
+| POST   | `/api/v1/me/api-keys`          | `apikey:create`         | Issue an API key (offline token) for self |
+| GET    | `/api/v1/me/api-keys`          | Bearer                  | List own API keys                     |
+| DELETE | `/api/v1/me/api-keys/{id}`     | Bearer                  | Revoke an own API key                 |
 | GET    | `/api/v1/prompts`              | Optional                | List/search prompts                   |
 | GET    | `/api/v1/prompts/featured`     | Optional                | Featured prompts                      |
 | GET    | `/api/v1/prompts/{id}`         | Optional                | Prompt detail                         |
@@ -144,14 +142,16 @@ See `.env.example` for the full variable list.
 
 ## Status transitions
 
-Valid prompt status graph: `draft → published → archived → draft` (restore).  
-Requires `prompt:publish` permission for any transition.
+Valid prompt status graph: `draft → published_org → published_public → archived → draft` (restore).  
+`prompt:publish` is required for own-Organisation transitions; `prompt:publish:public` (Gallery Operators only) is required for cross-Organisation promotion.
 
 ## Visibility
 
-- `public` — visible to all (anonymous included)
-- `internal` — requires authenticated caller
-- `restricted` — requires `prompt:read:restricted` scope
+Row-level filter applied to all read endpoints regardless of scope (see CONTEXT.md for the canonical statement):
+
+- `published_public` — visible across all Organisations (anonymous included for public read paths)
+- `published_org` — visible only within the author's Organisation
+- `draft` — visible only to the author and their Organisation's Org Admins
 
 ## OpenAPI spec
 

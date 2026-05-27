@@ -2,25 +2,28 @@
 
 ## Overview
 
-Prompt Gallery is a standalone FastAPI service. It is designed to be consumed by a learning platform (React SPA), an MCP-compatible chat client, and other API consumers.
+Prompt Gallery is a standalone FastAPI service. It is consumed by a first-party SPA, by Organisation-deployed chat clients (Copilot Enterprise, custom internal chat tooling) acting on behalf of End Users, and by API-key clients (CI pipelines, scripts). See ADR 0003 and ADR 0004 for the identity / access model and CONTEXT.md for actor-model vocabulary.
 
 ```
-┌──────────────────────┐
-│  Management Platform  │   ← Identity Provider (future; issues JWTs + JWKS)
-└──┬──────────────┬─────┘
-   │ JWT bearer   │ JWT bearer
-   ▼              ▼
-┌──────────────┐  ┌──────────────┐
-│ Learning     │  │  MCP/Chat    │
-│ Platform     │  │  Clients     │
-└──────┬───────┘  └──────────────┘
-       │ HTTP /api/v1/prompts
-       ▼
-┌──────────────────────┐
-│  Prompt Gallery API  │
-│  FastAPI + Pydantic  │
-│  SQLite / PostgreSQL │
-└──────────────────────┘
+┌────────────────────────────┐
+│  Keycloak (v26+)            │  ← IdP (ADR 0003)
+│  one realm, Organizations    │     Federates per-Organisation to Entra
+│  + JWKS + offline tokens     │     Issues all tokens
+└──┬────────────────┬──────────┘
+   │ JWT bearer     │ JWT bearer
+   ▼                ▼
+┌──────────────┐  ┌─────────────────────┐
+│ Gallery SPA  │  │ Org-deployed chat   │
+│ (first-party)│  │ clients + API-key   │
+│              │  │ clients (ADR 0004)  │
+└──────┬───────┘  └──────────┬──────────┘
+       │ HTTP /api/v1/...    │
+       ▼                     ▼
+┌──────────────────────────────────────┐
+│  Prompt Gallery API                   │
+│  FastAPI + Pydantic                   │
+│  SQLite / PostgreSQL                  │
+└──────────────────────────────────────┘
 ```
 
 ## Layer structure
@@ -33,10 +36,10 @@ src/
 ├── dependencies.py      # DI: get_db, get_current_user, get_optional_user
 │
 ├── middleware/
-│   ├── auth.py          # Real JWT middleware: decode_and_verify, user upsert
-│   │                    # AuthenticatedUser, get_current_user, get_optional_user
+│   ├── auth.py          # JWT middleware: decode_and_verify, user upsert
+│   │                    # AuthenticatedUser(sub, org_id, scope, azp, …); logs azp per request
 │   ├── request_id.py    # X-Request-ID echo/generate + request boundary logging
-│   └── rate_limit.py    # Tiered rate limiting: anonymous/user/machine (in-memory counter)
+│   └── rate_limit.py    # Multi-axis: per-IP / per-sub / per-azp / per-org_id (in-memory counter)
 │
 ├── models/              # SQLAlchemy 2.0 ORM models
 │   ├── user.py          # Profile cache (auto-upserted from JWT claims)
@@ -62,7 +65,7 @@ src/
 │   ├── prompts.py       # /prompts CRUD, ratings, featured, use
 │   ├── categories.py    # /categories CRUD
 │   ├── tags.py          # /tags CRUD
-│   ├── auth.py          # GET /me, POST /auth/generate-key
+│   ├── me.py            # GET /me; POST/GET/DELETE /me/api-keys (apikey:create scope)
 │   └── uploads.py       # POST/DELETE /uploads/images
 │
 ├── embeddings/          # Semantic embedding layer
@@ -83,13 +86,13 @@ src/
 │   └── taxonomy_service.py  # Categories, tags, get_or_create_tags
 │
 └── utils/
-    ├── jwt_utils.py     # decode_and_verify; JWTExpiredError, JWTInvalidError
-    │                    # JWKS (5-min TTL cache) + HMAC dev fallback
+    ├── jwt_utils.py     # decode_and_verify; checks iss, aud, exp + 60s leeway, signature.
+    │                    # JWKS (1-hour cache + on-kid-miss force-refetch + serve-stale-if-Keycloak-down)
+    │                    # HMAC dev fallback (hard-blocked when ENVIRONMENT=production)
     ├── response.py      # Envelope helper functions
     └── error.py         # AppError hierarchy, raise_http()
 
 scripts/
-├── generate_key.py      # CLI: generate machine JWT from JWT_SECRET_KEY
 └── reembed.py           # CLI: re-embed all prompts (after model swap or first deploy)
 ```
 
@@ -97,18 +100,19 @@ scripts/
 
 | # | Decision | Rationale |
 |---|---|---|
-| Auth | Hybrid JWT: JWKS (prod RS256) + HMAC dev fallback (HS256, blocked in production) | One code path, two key sources |
+| Auth | Keycloak-issued JWTs (RS256 via JWKS) + HMAC dev/test fallback (HS256, blocked in production). Strict `iss` + `aud` + `exp` checks; 60s clock leeway | ADR 0003/0004; one validation path, two key sources |
 | Storage | `StorageBackend` Protocol; `LocalFileSystemBackend` default, `S3Backend` optional | Swap backend via `STORAGE_BACKEND` env var without touching router code |
 | Caching | `cachetools.TTLCache` (in-memory, 60 s) for featured/categories/tags; Redis when `REDIS_URL` set; invalidated on writes | Hot reads cached with zero infra requirement in dev |
-| Rate limiting | `RateLimitMiddleware`: per-caller, per-minute window counter (anonymous/user/machine tiers) | Protects service without Redis/external dependency |
-| Request tracing | `RequestIDMiddleware` echoes/generates `X-Request-ID`; logs method/path/status/duration per request | Every response traceable; structured log fields for prod aggregation |
-| Token types | User tokens (short-lived) + machine tokens (long-lived, `POST /auth/generate-key`) | Covers interactive and service-to-service use |
-| User upsert | `users` row upserted on every authenticated request from JWT claims | Profile always fresh; no separate sync job |
-| Permissions | Flat `scope` list on `AuthenticatedUser`; `has_scope(perm)` check in routers | Matches JWT `scope` claim directly |
-| Status transitions | `draft→published→archived→draft`; enforced in `_apply_status_transition` | Requires `prompt:publish` separate from `prompt:write` |
+| Rate limiting | `RateLimitMiddleware`: multi-axis per-IP / per-`sub` / per-`azp` / per-`org_id`, per-minute window counter; request rejected if any bucket exceeded | Per-`azp` catches buggy single-deployment polling; per-`org_id` caps cross-Organisation impact |
+| Request tracing | `RequestIDMiddleware` echoes/generates `X-Request-ID`; logs method/path/status/duration + `azp` per request | Every response traceable to the OAuth client that made it |
+| Token issuance | All tokens issued by Keycloak. Personal API keys via `POST /api/v1/me/api-keys` (apikey:create scope) proxy to Keycloak offline-token issuance; service-identity keys provisioned by Org Admins in Keycloak admin | Single trust root; gallery owns no signing key in production |
+| User upsert | `users` row upserted on every authenticated request from JWT claims (incl. `org_id`) | Profile always fresh; no separate sync job |
+| Permissions | OAuth scopes in JWT `scope` claim, mapped from Keycloak realm/client roles; `has_scope(perm)` check in routers | Standards-shaped tokens; gallery reads `scope` per OAuth spec |
+| Status transitions | `draft→published_org→published_public→archived→draft`; enforced in `_apply_status_transition`. `prompt:publish` for own-Organisation, `prompt:publish:public` for cross-Organisation (Gallery Operators only) | Two-stage publish workflow; cross-org curation gated separately |
 | Soft deletes | `deleted_at IS NULL` filter on all active queries; association rows are removed | Audit trail + recoverable |
 | Tags | Auto-created on prompt create/update via `get_or_create_tags`; names lowercased | Flexible without admin overhead |
-| Visibility | `public` / `internal` / `restricted`; unauthenticated callers see only `public+published` | Layered access without complex RBAC |
+| Visibility | `draft` / `published_org` / `published_public`; row-level filter on `org_id` applied uniformly to reads regardless of scope | Scopes gate verbs; row filter gates which rows (CONTEXT.md) |
+| Audit | State-changing actions written to `prompt_events` (entity_type, entity_id, action, actor_user_id, actor_org_id, client_id=`azp`, details JSON). Indefinite retention v1; no read API v1 | Per-`azp` and per-`org_id` traceability for support and incident response |
 | Database | SQLite (dev/test), PostgreSQL (prod); `embedding_vector` stored as TEXT in SQLite | Alembic migration can add JSONB guard for Postgres |
 | Semantic search | Hybrid: ILIKE keyword + brute-force cosine over in-process matrix cache; fused via RRF (k=60) | See ADR-0001; no pgvector needed at this corpus size |
 | Embeddings | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` (384-dim) via `fastembed`; Protocol-based so model is swappable via `EMBEDDING_MODEL` | Dutch+English gallery content; multilingual model chosen per ADR-0002 |
@@ -122,12 +126,16 @@ scripts/
 Request: Authorization: Bearer <token>
   ↓
 middleware/auth.py: decode_and_verify(token)
-  ├── JWKS_URI set?  → fetch JWKS (cached 5 min), verify RS256
-  └── JWT_SECRET_KEY set + not production? → verify HS256 (dev only)
+  ├── JWKS_URI set?  → fetch JWKS (cached 1 hour, force-refetch on unknown kid,
+  │                    serve-stale if Keycloak unreachable), verify RS256
+  │                    Check iss, aud="prompt-gallery-api", exp (+60s leeway).
+  └── JWT_SECRET_KEY set + not production? → verify HS256 (dev/test only)
   ↓
-Upsert users row (name, email, avatar_url, last_seen_at)
+Upsert users row (external_id=sub, org_id, name, email, avatar_url, last_seen_at)
   ↓
-AuthenticatedUser(id, external_id, name, email, scope, last_seen_at)
+AuthenticatedUser(id, external_id, org_id, name, email, scope, azp, last_seen_at)
+  ↓
+Log azp on the request boundary
   ↓
 Router dependency (get_current_user / get_optional_user)
 ```
@@ -142,12 +150,12 @@ Error mapping:
 
 ```
 users ────────────────────────────────────── prompts
-  id, external_id, name, email              id, title, description, prompt_text
-  avatar_url, last_seen_at                  status, visibility, featured
-                                            creator_id → users.id
-                                            view_count, use_count
-                                            created_at, updated_at, published_at
-                                            deleted_at (soft delete)
+  id, external_id, org_id,                   id, title, description, prompt_text
+  name, email, avatar_url,                   status, visibility, featured
+  last_seen_at                                creator_id → users.id
+                                              view_count, use_count
+                                              created_at, updated_at, published_at
+                                              deleted_at (soft delete)
 
 prompts ←→ prompt_categories  (M2M via prompts_categories)
 prompts ←→ prompt_tags        (M2M via prompts_tags)
@@ -155,6 +163,11 @@ prompts ←→ prompt_tags        (M2M via prompts_tags)
 prompt_ratings
   id, prompt_id, user_id, rating (0–5)
   UNIQUE (prompt_id, user_id)
+
+prompt_events  (audit; write-only in v1)
+  id, entity_type, entity_id, action,
+  actor_user_id → users.id, actor_org_id,
+  client_id (azp), details (JSON), created_at
 ```
 
 ## Embedding flow
