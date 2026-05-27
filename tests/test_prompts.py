@@ -70,7 +70,7 @@ def test_list_featured(client, db, dev_user):
         title="Featured Prompt",
         description="desc",
         prompt_text="text",
-        status="published",
+        status="published_org",
         visibility="public",
         featured=True,
         creator_id=dev_user.id,
@@ -99,9 +99,9 @@ def test_status_transition_valid(client, auth_headers, db, dev_user):
     db.commit()
     db.refresh(p)
 
-    r = client.patch(f"/api/v1/prompts/{p.id}", json={"status": "published"}, headers=auth_headers)
+    r = client.patch(f"/api/v1/prompts/{p.id}", json={"status": "published_org"}, headers=auth_headers)
     assert r.status_code == 200
-    assert r.json()["data"]["status"] == "published"
+    assert r.json()["data"]["status"] == "published_org"
     assert r.json()["data"]["published_at"] is not None
 
 
@@ -130,7 +130,7 @@ def test_search_prompts(client, auth_headers, db, dev_user):
         title="Unique Searchable XYZ",
         description="desc",
         prompt_text="text",
-        status="published",
+        status="published_org",
         visibility="public",
         featured=False,
         creator_id=dev_user.id,

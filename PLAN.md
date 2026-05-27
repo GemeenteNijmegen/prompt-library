@@ -9,27 +9,28 @@
 ## Architecture Overview
 
 ```
-┌──────────────────────┐
-│  Management Platform   │   ← Identity Provider (auth, users, roles, tokens)
-│  (not yet built)      │      Issues JWTs, manages JWKS
-└──┬──────────────┬─────┘
-   │              │
-   │  JWT         │  JWT
-   │  bearer      │  bearer
-   ▼              ▼
-┌──────────────┐  ┌───────────────┐
-│ Learning     │  │ MCP-compatible  │
-│ Platform     │  │ Chat Clients    │
-│ (React SPA)  │  │                │
-└──────┬───────┘  └───────────────┘
-       │
-       ▼  HTTP → /api/v1/prompts
-┌───────────────────┐
-│   Prompt Gallery   │   ← This service (standalone)
-│   REST API         │
-│   FastAPI + Pydantic│
-│   PostgreSQL/SQLite│
-└───────────────────┘
+┌────────────────────────────┐
+│  Keycloak (v26+)            │  ← IdP (see ADR 0003)
+│  - one realm                 │     Federates per-Organisation to Entra
+│  - Organizations             │     Issues JWTs, exposes JWKS + DCR
+│  - DCR + offline tokens      │
+└──┬────────────────┬──────────┘
+   │ JWT bearer     │ JWT bearer
+   ▼                ▼
+┌──────────────┐  ┌─────────────────────┐
+│ Gallery SPA  │  │ Org-deployed chat   │  Primary consumers:
+│ (first-party)│  │ clients (Copilot    │  Org-deployed clients
+│              │  │ Enterprise, custom  │  configured once per
+│              │  │ internal clients)   │  Organisation. API keys
+│              │  │ + API-key clients   │  for scripts/CI fallback.
+└──────┬───────┘  └──────────┬──────────┘  See ADR 0004.
+       │                     │
+       ▼  HTTP /api/v1/...   ▼
+┌──────────────────────────────────────┐
+│   Prompt Gallery REST API             │  ← This service
+│   FastAPI + Pydantic                  │
+│   PostgreSQL/SQLite                   │
+└──────────────────────────────────────┘
 ```
 
 ---
@@ -40,19 +41,24 @@
 
 | #   | Area               | Decision                                                                             | Rationale                                         |
 | --- | ------------------ | ------------------------------------------------------------------------------------ | ------------------------------------------------- |
-| 1a  | IdP                | Not yet built — design contract, stub it                                             | Future-proof, don't block development             |
-| 1b  | Token mechanism    | Hybrid JWT: short-lived (users) + long-lived (machine/API key)                       | One auth path, covers all consumer types          |
-| 1c  | Roles              | Permission claims in JWT (`scope`), no local roles                                   | Trust IdP, decouple from platform RBAC            |
+| 1a  | IdP                | **Keycloak v26+** (see ADR 0003). One realm; each Organisation modelled as a Keycloak Organization federated to its Entra tenant via OIDC identity brokering. | Mature DCR, first-class scope↔role mapping, multi-tenant via Organizations |
+| 1b  | Token mechanism    | Keycloak-issued JWTs for all consumers. Short-lived access (15 min) + interactive refresh (30 d / 7 d idle, rotate-on-use) for MCP clients; offline tokens (365 d) for API-key fallback. | One issuer, one validation path; per-client TTL configured in Keycloak |
+| 1c  | Roles              | OAuth scopes in JWT `scope` claim, mapped 1:1 from Keycloak realm/client roles via role scope mappers. No local gallery roles. | Standards-shaped tokens; gallery code reads `scope` per OAuth spec |
 | 1m  | Existing data      | Fresh start, no migration script                                                     | Extract is for a new service, not a data move     |
+| 1n  | Access model       | Organisation-deployed OAuth clients primary (manually registered in Keycloak by Gallery Operator at org onboarding, one per deployment, confidential client + PKCE). API keys via Keycloak offline tokens as fallback. DCR + personal-LLM-account flow deferred to v2. See ADR 0004. | Setup boundary is the Organisation, not the End User; bounded manual cadence at current scale |
+| 1o  | Org discovery      | Email-domain mapping to Keycloak Organization (Entra federation per org). No picker fallback in v1. | Lowest-friction routing; Entra B2B guest UPN mismatch is a documented v1 limitation |
+| 1p  | Org provisioning   | Manual Gallery-Operator task per new Organisation (Keycloak org + Entra IdP config + first Organisation Admin). | Low cadence; self-serve customer onboarding is v2 |
+| 1q  | Admin model        | Delegated admin via Keycloak Organizations: Organisation Admins self-serve user/scope management for own org in Keycloak admin console. Gallery Operators only handle cross-cutting changes. | Scales past a handful of orgs without exporting Gallery Ops queue as a bottleneck |
 | 10a | Token delivery     | `Authorization: Bearer <jwt>` — header only                                          | Single pattern, no cookie complexity              |
 | 10b | Profile upsert     | Auto-upsert `users` table on every auth'd request                                    | Guarantees freshness, negligible overhead         |
-| 10c | JWT structure      | `sub`, `scope`, `name`, `email`, `avatar_url`, `iss`, `iat`, `exp` — no extra claims | Keep it simple; add `org_id` later if needed      |
-| 11a | API keys           | Also JWT-signed (same mechanism)                                                     | One auth route, one validation path               |
+| 10c | JWT structure      | `iss`, `sub`, `aud`, `azp`, `iat`, `exp`, `scope`, `org_id`, `name`, `email`, `avatar_url`. `aud` MUST contain `"prompt-gallery-api"` (strict check); `azp` is logged per request. | Standards-shaped (RFC 9068); `org_id` powers row-level visibility; `azp` enables per-integration audit |
+| 11a | API keys           | Keycloak offline tokens, requested by the gallery on behalf of the End User. Gallery does **not** sign tokens. | Single issuer; revocable in Keycloak admin or via gallery UI |
 | 11b | Header             | `Authorization: Bearer` (same as user)                                               | Single header convention                          |
-| 11c | Key management     | API endpoint (`/api/v1/auth/generate-key`) + CLI script                              | API for runtime, CLI for bootstrap/dev            |
-| 11d | Revocation         | TTL-bound user tokens + keypair rotation for machine keys                            | No deny list needed; bounded exposure window      |
-| 5d  | JWT verification   | JWKS endpoint (prod) + shared secret HMAC (dev fallback)                             | Standard OIDC flow, simple dev mode               |
-| 14  | Rate limiting      | Tiered: anonymous 30/min, user 120/min, machine 300/min                              | Protects against abuse, different client profiles |
+| 11c | Key management     | `POST /api/v1/integrations/api-keys` proxies to Keycloak offline-token issuance for the calling End User; user can list/revoke via gallery UI. Legacy `/api/v1/auth/generate-key` HS256 signer is removed. Dev-mode HMAC fallback retained for tests only. | Gallery owns no signing key in production; one trust root |
+| 11d | Revocation         | TTL-bound access tokens + refresh-token replay detection (OAuth 2.1 BCP) + Keycloak admin/UI revocation of offline tokens. Entra deprovisioning is best-effort within ≤7 days for v1 (SCIM in v2). | Bounded exposure window; documented v1 posture |
+| 11e | DCR                | Disabled in v1. Re-enable with strict client policies + per-Organisation opt-in when personal-LLM-account integration becomes a real demand. See ADR 0004 upgrade path. | Org-deployed clients cover the v1 consumer mix; DCR adds attack surface without paying off until personal-LLM is a real case |
+| 5d  | JWT verification   | JWKS endpoint (prod, Keycloak) + shared secret HMAC (dev/test fallback, hard-blocked in production). Gallery enforces `iss`, `aud`, `exp`, signature. | Standard OIDC flow; HMAC fallback survives only as a test-environment convenience |
+| 14  | Rate limiting      | Multi-axis: anonymous 30/min per IP, End User 120/min per `sub`, OAuth client 600/min per `azp`, Organisation 1200/min per `org_id`. Request rejected if any bucket exceeded. Starting values; tune from production traffic. | Per-`azp` catches buggy single-deployment polling; per-`org_id` prevents one Organisation monopolising the gallery |
 | 14a | Rate limit backend | In-memory (dev), SQLite (prod) — no Redis for rate limiting. Redis is supported only as an optional caching layer (see decision 17). | Reuse existing DB for counters, no extra service  |
 
 ### Domain Model
@@ -71,7 +77,7 @@
 | #   | Area                  | Decision                                                              | Rationale                                                     |
 | --- | --------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------- |
 | 3a  | Image storage         | Pluggable adapter: LocalFileSystem (default) + S3 (optional)          | Cloud-agnostic, simple to swap                                |
-| 3b  | Status values         | `draft` / `published` / `archived` (English)                          | Standard vocabulary for API consumers                         |
+| 3b  | Status values         | `draft` / `published_org` / `published_public` / `archived`. Visibility table and row-level filter in CONTEXT.md. | Distinguishes own-Organisation publication from cross-Organisation public exposure |
 | 3c  | Pagination            | Offset-based (`page`, `per_page`)                                     | Simple, adequate for gallery scale                            |
 | 3d  | API versioning        | `/api/v1/` path prefix                                                | Versioned from day one, easy to upgrade                       |
 | 20  | Storage backends      | LocalFileSystem (always) + S3 (optional)                              | Local for dev/test, S3 for prod portability. Skip Cloudinary. |
@@ -83,7 +89,7 @@
 
 | #     | Area                    | Decision                                                    | Rationale                                                   |
 | ----- | ----------------------- | ----------------------------------------------------------- | ----------------------------------------------------------- |
-| 4a    | Status transitions      | Embedded in PATCH body (`{status: "published"}`). Valid transitions: `draft→published`, `published→archived`, `archived→draft` (restore). All other transitions are rejected with `409 CONFLICT`. Requires `prompt:publish` permission; `prompt:write` alone is insufficient for status changes. | RESTful, single endpoint for all updates |
+| 4a    | Status transitions      | Embedded in PATCH body (`{status: "published_org"}`). Valid transitions: `draft→published_org` (`prompt:publish`); `published_org→published_public` (`prompt:publish:public`, Gallery Operators only); `published_public→published_org` (`prompt:publish:public`); `*→archived` (`prompt:publish`); `archived→draft` (`prompt:publish`, restore). All other transitions are rejected with `409 CONFLICT`. `prompt:write` alone never changes status. | Two-stage publish workflow: per-Organisation by Org-scoped publishers, cross-Organisation curation by Gallery Operators |
 | 4b    | Ratings                 | Authenticated only (JWT required)                           | No anonymous ratings — prevents noise/spam                  |
 | 4c    | Taxonomy                | Categories pre-defined; tags auto-create on prompt creation | Controlled taxonomy, flexible tags                          |
 | 4d    | Image uploads           | Through gallery API (server handles storage call)           | Simple, no presigned URL complexity                         |
@@ -98,16 +104,23 @@
 
 | Permission               | Grants                                                        |
 | ------------------------ | ------------------------------------------------------------- |
-| `prompt:read`            | List, get detail, search, featured (public + internal)        |
+| `prompt:read`            | List, get detail, search, featured (public + own-Organisation per row-level visibility filter). **Default scope** for all authenticated End Users. |
 | `prompt:read:restricted` | Access `restricted` visibility prompts                        |
 | `prompt:create`          | Create new prompts                                            |
 | `prompt:write`           | Update existing prompts (excluding status changes). Includes setting `featured: true/false`. |
-| `prompt:publish`         | Transition status (draft→published, published→archived, etc.) |
+| `prompt:publish`         | Promote a prompt to `published_org` (visible across own Organisation). Available to DCR-registered integrations. |
+| `prompt:publish:public`  | Promote a prompt to `published_public` (visible across all Organisations). **Gallery Operators only** — restricted from DCR-registered clients via Keycloak client policies. |
 | `prompt:rate`            | Submit or view own ratings                                    |
 | `prompt:image`           | Upload/manage prompt images                                   |
+| `prompt:moderate`        | Cross-Organisation moderation. **Gallery Operators only** — restricted from DCR-registered clients. |
+| `apikey:create`          | Issue API keys (Keycloak offline tokens) for own End User identity via `POST /api/v1/me/api-keys`. **Not granted by default** — typically held by Organisation Admins and a small set of developers per Organisation. Regular End Users do not have this scope. |
 | `admin:manage_taxonomy`  | CRUD on categories and tags                                   |
-| `admin:manage_keys`      | Generate/revoke machine JWT keys                              |
 | `admin:manage_users`     | View user profiles (admin console)                            |
+| `admin:read_audit`       | Read the `prompt_events` audit log. Reserved in v1 (no read API yet); query the DB directly. |
+
+> **Note:** `admin:manage_keys` is removed — the gallery no longer signs machine JWTs. Offline-token (API key) issuance is gated by ownership (End Users issue their own) and Keycloak admin (Organisation Admins / Gallery Operators can revoke). See ADR 0004.
+>
+> **DCR-restricted scopes.** `admin:*`, `prompt:publish:public`, and `prompt:moderate` are configured in Keycloak client policies so DCR-registered clients cannot request them. First-party clients (the SPA and the API-key client) can. A compromised LLM integration cannot escalate to admin or to cross-Organisation actions.
 
 **Typical role compositions (for IdP reference):**
 
@@ -176,12 +189,20 @@ order                   — asc, desc (default: desc)
 | `POST`   | `/api/v1/uploads/images`       | `prompt:image` | `multipart/form-data` | Upload image → `{url, key}` |
 | `DELETE` | `/api/v1/uploads/images/{key}` | `prompt:image` | —                     | Delete image (204)          |
 
-#### Authentication
+#### Authentication & API Keys
 
-| Method | Path                        | Auth                | Description                      |
-| ------ | --------------------------- | ------------------- | -------------------------------- |
-| `GET`  | `/api/v1/me`                | Bearer (user JWT)   | Current user profile (read-only) |
-| `POST` | `/api/v1/auth/generate-key` | `admin:manage_keys` | Generate machine JWT             |
+| Method   | Path                          | Auth              | Description                                                                              |
+| -------- | ----------------------------- | ----------------- | ---------------------------------------------------------------------------------------- |
+| `GET`    | `/api/v1/me`                  | Bearer (user JWT) | Current End User profile (read-only, from JWT claims)                                    |
+| `POST`   | `/api/v1/me/api-keys`         | `apikey:create`   | Issue a new API key for the calling End User (proxy to Keycloak offline-token issuance). Returns the token exactly once; subsequent reads only return metadata. |
+| `GET`    | `/api/v1/me/api-keys`         | Bearer (user JWT) | List the calling End User's active API keys (id, label, created_at, last_used_at — never the token itself) |
+| `DELETE` | `/api/v1/me/api-keys/{id}`    | Bearer (user JWT) | Revoke a specific API key owned by the calling End User                                  |
+
+> The legacy `/api/v1/auth/generate-key` HS256-signing endpoint is removed. The gallery no longer signs tokens in production; all tokens are Keycloak-issued. The dev-mode HMAC fallback in `src/utils/jwt_utils.py` is retained for tests and local development without Keycloak running, but is hard-blocked when `ENVIRONMENT=production`.
+>
+> Organisation-deployed OAuth clients (Copilot Enterprise, custom internal chat clients) do **not** surface in the gallery API in v1. They are managed in Keycloak admin by the Gallery Operator (see ADR 0004 §"Organisation onboarding").
+>
+> **Service-identity API keys** (keys for headless users — CI pipelines, automation, OpenWebUI service accounts) are provisioned by Organisation Admins directly in Keycloak admin: create a local Keycloak user inside the Organisation, grant the scopes that user should have, issue an offline token. The gallery `/me/api-keys` endpoints cover "I want a key for *my* End User identity"; the headless-identity case bypasses the gallery API and lives entirely in Keycloak.
 
 #### Infrastructure
 
@@ -244,6 +265,7 @@ order                   — asc, desc (default: desc)
 CREATE TABLE users (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     external_id  TEXT    NOT NULL UNIQUE,      -- JWT "sub" claim
+    org_id       TEXT    NOT NULL,             -- JWT "org_id" claim (Keycloak Organization ID)
     name         TEXT,
     email        TEXT,
     avatar_url   TEXT,
@@ -258,7 +280,7 @@ CREATE TABLE prompts (
     prompt_text       TEXT    NOT NULL,
     example_output    TEXT,
     image_url         TEXT,
-    status            TEXT    NOT NULL DEFAULT 'draft',     -- draft, published, archived
+    status            TEXT    NOT NULL DEFAULT 'draft',     -- draft, published_org, published_public, archived
     visibility        TEXT    NOT NULL DEFAULT 'public',    -- public, internal, restricted
     featured          BOOLEAN NOT NULL DEFAULT FALSE,
     creator_id        INTEGER NOT NULL REFERENCES users(id),
@@ -311,6 +333,25 @@ CREATE TABLE prompt_ratings (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (prompt_id, user_id)
 );
+
+-- Audit log of state-changing actions (writes only; reads not recorded).
+-- Indefinite retention in v1; a prune job is a v2 concern.
+-- No read API in v1 — Gallery Operators query the DB directly.
+CREATE TABLE prompt_events (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    entity_type     TEXT    NOT NULL,        -- 'prompt' | 'rating' | 'api_key' | 'category' | 'tag' | 'image'
+    entity_id       TEXT    NOT NULL,        -- string to allow non-integer IDs (e.g., image keys)
+    action          TEXT    NOT NULL,        -- 'create' | 'update' | 'status_change' | 'delete' | 'revoke' | ...
+    actor_user_id   INTEGER NOT NULL REFERENCES users(id),
+    actor_org_id    TEXT    NOT NULL,        -- mirrors users.org_id at event time; useful for cross-org filtering
+    client_id       TEXT    NOT NULL,        -- JWT "azp" claim: which OAuth client made the call
+    details         TEXT,                    -- JSON, action-specific (e.g., before/after for status_change)
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX idx_prompt_events_actor_user ON prompt_events(actor_user_id, created_at);
+CREATE INDEX idx_prompt_events_actor_org  ON prompt_events(actor_org_id, created_at);
+CREATE INDEX idx_prompt_events_entity     ON prompt_events(entity_type, entity_id, created_at);
+CREATE INDEX idx_prompt_events_created_at ON prompt_events(created_at);
 ```
 
 ### Environment Variables
@@ -318,9 +359,12 @@ CREATE TABLE prompt_ratings (
 | Variable               | Required   | Default                     | Purpose                                          |
 | ---------------------- | ---------- | --------------------------- | ------------------------------------------------ |
 | `DATABASE_URL`         | Yes        | `sqlite:///data/gallery.db` | Database connection string                       |
-| `JWKS_URI`             | Yes (prod) | —                           | JWKS endpoint URL for JWT verification           |
-| `JWT_ISSUER`           | Yes (prod) | `http://localhost:9000`     | Expected `iss` claim value                       |
-| `JWT_SECRET_KEY`       | Dev only   | —                           | Shared HMAC secret for JWT dev fallback. Set when `JWKS_URI` is absent. Do not use in production. |
+| `JWKS_URI`             | Yes (prod) | —                           | JWKS endpoint URL for JWT verification. For Keycloak: `https://<keycloak-host>/realms/<realm>/protocol/openid-connect/certs`. App refuses to start in production if unset. |
+| `JWT_ISSUER`           | Yes (prod) | —                           | Expected `iss` claim value. For Keycloak: `https://<keycloak-host>/realms/<realm>` (no trailing slash; must match exactly what Keycloak puts in the `iss` claim). App refuses to start in production if unset. |
+| `JWT_AUDIENCE`         | Yes (prod) | `prompt-gallery-api`        | Expected `aud` claim value; gallery enforces strict containment. Configure Keycloak audience mapper to emit this. |
+| `JWT_SECRET_KEY`       | Dev only   | —                           | Shared HMAC secret for JWT dev/test fallback. Set when `JWKS_URI` is absent. Hard-blocked when `ENVIRONMENT=production`. |
+| `JWKS_CACHE_TTL_SECONDS` | No       | `3600`                      | How long fetched JWKS is cached. On unknown `kid`, cache is force-refreshed once before failing. |
+| `JWT_LEEWAY_SECONDS`   | No         | `60`                        | Clock-skew tolerance for `exp`/`nbf` checks. |
 | `STORAGE_BACKEND`      | No         | `local`                     | `local` or `s3`                                  |
 | `STORAGE_LOCAL_PATH`   | No         | `./uploads`                 | Local file storage directory                     |
 | `S3_BUCKET`            | S3 only    | —                           | S3 bucket name                                   |
@@ -546,14 +590,17 @@ Files in the learning platform that reference prompts and need to be updated aft
 
 #### Phase 3: Auth & Middleware
 
-- JWKS fetcher + JWT validation (`jwt_utils.py`)
-- Auth middleware (`middleware/auth.py`) — replaces stub from Phase 2
-- User auto-upsert
-- `/me` endpoint
-- `/auth/generate-key` endpoint
-- CLI key generation script
-- Test fixtures for signed JWTs (used to retrofit Phase 2 tests)
-- Retrofit Phase 2 protected-endpoint tests to use real signed JWT fixtures instead of the stub
+Builds the Keycloak-facing auth surface per ADR 0003 / ADR 0004.
+
+- `jwt_utils.py`: JWKS fetcher (1h cache + on-kid-miss force-refetch + serve-stale-if-IdP-down), `decode_and_verify` with strict `iss`/`aud`/`exp` checks + 60s leeway, RS256 (prod) / HS256 (dev/test) algorithm whitelist, hard-block HMAC fallback when `ENVIRONMENT=production`
+- `middleware/auth.py`: replace Phase 2 stub; populate `AuthenticatedUser(sub, org_id, scope, azp, ...)`; auto-upsert `users` row (including `org_id`); log `azp` on the request boundary
+- `routers/me.py`: `GET /me` (profile from JWT claims); `POST/GET/DELETE /me/api-keys` (proxy to Keycloak offline-token issuance / list / revoke; `apikey:create` scope on POST)
+- `POST /api/v1/me/logout-everywhere`: panic-button endpoint — kills calling user's Keycloak SSO sessions + revokes all their refresh chains + revokes all their API keys
+- Multi-axis rate limiting (per-IP / per-`sub` / per-`azp` / per-`org_id`) in `middleware/rate_limit.py`
+- `prompt_events` audit table + write hooks on state-changing endpoints (no read API in v1)
+- Row-level visibility helper applied uniformly on read endpoints
+- Test fixtures for signed JWTs (HS256 with `JWT_SECRET_KEY`); retrofit Phase 2 protected-endpoint tests
+- The legacy `/auth/generate-key` HS256-signing endpoint and `scripts/generate_key.py` are **deleted**; the gallery no longer signs tokens in production. (Test fixtures use `python-jose` directly, not the script.)
 
 #### Phase 4: Image Uploads
 
