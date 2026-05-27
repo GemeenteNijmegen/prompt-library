@@ -89,6 +89,28 @@ class KeycloakClient:
             _log.warning("Keycloak session revocation failed status=%s", resp.status_code)
             raise KeycloakError(f"Keycloak session revocation failed: {resp.status_code}")
 
+    def logout_all_sessions(self, user_external_id: str) -> None:
+        """Invalidate all interactive sessions for a Keycloak user.
+
+        ``user_external_id`` is the Keycloak user UUID (the ``sub`` claim).
+        """
+        admin_token = self._get_admin_token()
+        resp = httpx.delete(
+            f"{self._admin_base()}/users/{user_external_id}/sessions",
+            headers={"Authorization": f"Bearer {admin_token}"},
+            timeout=10.0,
+        )
+        # 204 = all sessions terminated, 404 = user not found (treat as no-op)
+        if resp.status_code not in (204, 404):
+            _log.warning(
+                "Keycloak logout-all-sessions failed user=%s status=%s",
+                user_external_id,
+                resp.status_code,
+            )
+            raise KeycloakError(
+                f"Keycloak logout-all-sessions failed: {resp.status_code}"
+            )
+
 
 _default_client = KeycloakClient()
 
