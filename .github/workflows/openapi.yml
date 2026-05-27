@@ -34,7 +34,7 @@ jobs:
       - name: Generate OpenAPI spec
         run: python scripts/export_openapi.py
         env:
-          ENVIRONMENT: production
+          ENVIRONMENT: development
           JWT_SECRET_KEY: ci-placeholder
 
       - name: Commit updated spec
