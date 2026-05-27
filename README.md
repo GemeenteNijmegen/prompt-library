@@ -75,6 +75,13 @@ All protected endpoints use `Authorization: Bearer <jwt>`. See ADR 0003 (identit
 
 **Dev / testing mode (HMAC):** Set `JWT_SECRET_KEY` in `.env` and leave `JWKS_URI` empty. Tokens are HS256-signed with the shared secret. Hard-blocked when `ENVIRONMENT=production`.
 
+To mint a token for local `curl` testing:
+
+```bash
+python scripts/dev_token.py --scope prompt:read prompt:create
+# prints a short-lived HS256 Bearer token; refuses to run when ENVIRONMENT=production
+```
+
 ## API prefix
 
 All routes are under `/api/v1/`. Health: `GET /api/v1/health`.
