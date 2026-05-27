@@ -6,6 +6,7 @@ from src.dependencies import get_db, get_current_user
 from src.schemas.category import CategoryCreate, CategoryUpdate, CategoryDetail
 from src.schemas.common import DataResponse, PaginatedResponse, ActionResponse
 from src.services import taxonomy_service
+from src.services.audit_service import write_event
 from src.utils.error import NotFoundError, ConflictError
 
 router = APIRouter(tags=["categories"])
@@ -41,6 +42,7 @@ def get_category(category_id: int, db: Session = Depends(get_db)):
 def create_category(data: CategoryCreate, db: Session = Depends(get_db), user=Depends(_require_taxonomy)):
     try:
         cat = taxonomy_service.create_category(db, data)
+        write_event(db, entity_type="category", entity_id=cat["id"], action="created", caller=user, details={"name": cat["name"]})
         cache_delete(_CACHE_KEY)
         return {"data": cat, "meta": {"action": "created"}}
     except ConflictError as e:
@@ -51,6 +53,7 @@ def create_category(data: CategoryCreate, db: Session = Depends(get_db), user=De
 def update_category(category_id: int, data: CategoryUpdate, db: Session = Depends(get_db), user=Depends(_require_taxonomy)):
     try:
         cat = taxonomy_service.update_category(db, category_id, data)
+        write_event(db, entity_type="category", entity_id=category_id, action="updated", caller=user, details={"name": cat["name"]})
         cache_delete(_CACHE_KEY)
         return {"data": cat}
     except NotFoundError as e:
@@ -63,6 +66,7 @@ def update_category(category_id: int, data: CategoryUpdate, db: Session = Depend
 def delete_category(category_id: int, db: Session = Depends(get_db), user=Depends(_require_taxonomy)):
     try:
         taxonomy_service.soft_delete_category(db, category_id)
+        write_event(db, entity_type="category", entity_id=category_id, action="deleted", caller=user)
         cache_delete(_CACHE_KEY)
     except NotFoundError as e:
         raise HTTPException(status_code=404, detail={"error": {"code": e.code, "message": e.message}})

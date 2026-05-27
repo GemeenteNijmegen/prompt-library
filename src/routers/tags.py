@@ -5,6 +5,7 @@ from src.cache import cache_delete, cache_get, cache_set
 from src.dependencies import get_db, get_current_user
 from src.schemas.tag import TagCreate, TagDetail
 from src.services import taxonomy_service
+from src.services.audit_service import write_event
 from src.utils.error import NotFoundError, ConflictError
 
 router = APIRouter(tags=["tags"])
@@ -40,6 +41,7 @@ def get_tag(tag_id: int, db: Session = Depends(get_db)):
 def create_tag(data: TagCreate, db: Session = Depends(get_db), user=Depends(_require_taxonomy)):
     try:
         tag = taxonomy_service.create_tag(db, data)
+        write_event(db, entity_type="tag", entity_id=tag["id"], action="created", caller=user, details={"name": tag["name"]})
         cache_delete(_CACHE_KEY)
         return {"data": tag, "meta": {"action": "created"}}
     except ConflictError as e:
@@ -50,6 +52,7 @@ def create_tag(data: TagCreate, db: Session = Depends(get_db), user=Depends(_req
 def delete_tag(tag_id: int, db: Session = Depends(get_db), user=Depends(_require_taxonomy)):
     try:
         taxonomy_service.soft_delete_tag(db, tag_id)
+        write_event(db, entity_type="tag", entity_id=tag_id, action="deleted", caller=user)
         cache_delete(_CACHE_KEY)
     except NotFoundError as e:
         raise HTTPException(status_code=404, detail={"error": {"code": e.code, "message": e.message}})
