@@ -69,7 +69,7 @@ def make_jwt(
         "avatar_url": avatar_url,
         "iss": _JWT_ISSUER,
         "iat": now - 10,
-        "exp": (now - 5) if expired else (now + 3600),
+        "exp": (now - 120) if expired else (now + 3600),  # 120 s exceeds the 60 s leeway
     }
     if machine:
         payload["token_type"] = "machine"

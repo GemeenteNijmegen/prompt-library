@@ -14,6 +14,7 @@ logging.basicConfig(
     level=settings.LOG_LEVEL.upper(),
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
 )
+logging.getLogger("sqlalchemy").propagate = False
 logger = logging.getLogger(__name__)
 
 
@@ -28,7 +29,6 @@ async def lifespan(app: FastAPI):
 def create_app(
     rate_limit_anonymous: int | None = None,
     rate_limit_user: int | None = None,
-    rate_limit_machine: int | None = None,
 ) -> FastAPI:
     app = FastAPI(
         title="Prompt Gallery API",
@@ -44,7 +44,6 @@ def create_app(
         RateLimitMiddleware,
         limit_anonymous=rate_limit_anonymous if rate_limit_anonymous is not None else settings.RATE_LIMIT_ANONYMOUS,
         limit_user=rate_limit_user if rate_limit_user is not None else settings.RATE_LIMIT_USER,
-        limit_machine=rate_limit_machine if rate_limit_machine is not None else settings.RATE_LIMIT_MACHINE,
     )
 
     app.add_middleware(

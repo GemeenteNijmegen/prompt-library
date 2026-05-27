@@ -1,10 +1,13 @@
 import json
+import logging
 import time
 from datetime import datetime, timezone
 
 import numpy as np
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
+
+log = logging.getLogger(__name__)
 
 from src.models.prompt import Prompt
 from src.models.user import User
@@ -93,13 +96,14 @@ def _rrf_fuse(
     keyword_ids: list[int],
     vector_ids: list[int],
     k: int = _RRF_K,
-) -> list[int]:
+) -> tuple[list[int], dict[int, float]]:
     scores: dict[int, float] = {}
     for rank, pid in enumerate(keyword_ids):
         scores[pid] = scores.get(pid, 0.0) + 1.0 / (k + rank + 1)
     for rank, pid in enumerate(vector_ids):
         scores[pid] = scores.get(pid, 0.0) + 1.0 / (k + rank + 1)
-    return sorted(scores.keys(), key=lambda pid: scores[pid], reverse=True)
+    ordered = sorted(scores.keys(), key=lambda pid: scores[pid], reverse=True)
+    return ordered, scores
 
 
 def _base_query(db: Session):
@@ -198,8 +202,17 @@ def list_prompts(
         )
     )
     # Fetch all candidate IDs from keyword search (no pagination yet)
-    keyword_rows = keyword_q.with_entities(Prompt.id).all()
+    keyword_rows = keyword_q.with_entities(Prompt.id, Prompt.title).all()
     keyword_ids = [r[0] for r in keyword_rows]
+    _kw_titles = {r[0]: r[1] for r in keyword_rows}
+
+    if log.isEnabledFor(logging.DEBUG):
+        log.debug(
+            "hybrid search q=%r  keyword hits=%d: %s",
+            search,
+            len(keyword_ids),
+            [(pid, _kw_titles[pid]) for pid in keyword_ids[:10]],
+        )
 
     # Vector candidates: score against embedded query
     vector_cache = _load_vector_cache(db)
@@ -217,9 +230,43 @@ def list_prompts(
     scored.sort(key=lambda x: x[1], reverse=True)
     vector_ids = [pid for pid, _ in scored[:_VECTOR_TOP_K]]
 
+    if log.isEnabledFor(logging.DEBUG):
+        _vec_title_rows = (
+            db.query(Prompt.id, Prompt.title)
+            .filter(Prompt.id.in_(vector_ids))
+            .all()
+        ) if vector_ids else []
+        _vec_titles = {r[0]: r[1] for r in _vec_title_rows}
+        _score_map = dict(scored)
+        log.debug(
+            "hybrid search q=%r  vector hits=%d (top %d shown): %s",
+            search,
+            len(scored),
+            min(10, len(vector_ids)),
+            [(pid, round(_score_map[pid], 4), _vec_titles.get(pid, "?")) for pid in vector_ids[:10]],
+        )
+
     # RRF fusion
-    fused_ids = _rrf_fuse(keyword_ids, vector_ids)
+    fused_ids, rrf_scores = _rrf_fuse(keyword_ids, vector_ids)
     total = len(fused_ids)
+
+    if log.isEnabledFor(logging.DEBUG):
+        _fused_title_rows = (
+            db.query(Prompt.id, Prompt.title)
+            .filter(Prompt.id.in_(fused_ids[:10]))
+            .all()
+        ) if fused_ids else []
+        _fused_titles = {r[0]: r[1] for r in _fused_title_rows}
+        log.debug(
+            "hybrid search q=%r  fused total=%d (top %d shown): %s",
+            search,
+            total,
+            min(10, len(fused_ids)),
+            [
+                (pid, round(rrf_scores[pid], 4), _fused_titles.get(pid, "?"))
+                for pid in fused_ids[:10]
+            ],
+        )
 
     # Pagination
     page_ids = fused_ids[(page - 1) * per_page: page * per_page]
