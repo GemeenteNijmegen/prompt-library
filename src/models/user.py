@@ -21,3 +21,4 @@ class User(Base):
 
     prompts: Mapped[list["Prompt"]] = relationship("Prompt", back_populates="creator")
     ratings: Mapped[list["PromptRating"]] = relationship("PromptRating", back_populates="user")
+    api_keys: Mapped[list["ApiKey"]] = relationship("ApiKey", back_populates="user")

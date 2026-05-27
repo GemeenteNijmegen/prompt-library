@@ -45,6 +45,17 @@ class Settings(BaseSettings):
     RATE_LIMIT_CLIENT: int = 600
     RATE_LIMIT_ORG: int = 1200
 
+    # Keycloak API-key issuance (ADR 0004 §API-key issuance).
+    # The API-key client uses token exchange to issue offline tokens on behalf
+    # of the calling End User.  The admin client revokes sessions via the
+    # Keycloak admin REST API.
+    KEYCLOAK_URL: str = ""
+    KEYCLOAK_REALM: str = "prompt-gallery"
+    KEYCLOAK_API_KEY_CLIENT_ID: str = ""
+    KEYCLOAK_API_KEY_CLIENT_SECRET: str = ""
+    KEYCLOAK_ADMIN_CLIENT_ID: str = ""
+    KEYCLOAK_ADMIN_CLIENT_SECRET: str = ""
+
     # Upload
     MAX_UPLOAD_SIZE: int = 5_242_880  # 5 MB
 
