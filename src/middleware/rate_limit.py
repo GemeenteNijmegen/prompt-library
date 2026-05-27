@@ -32,10 +32,6 @@ _RATE_LIMITED_RESPONSE = JSONResponse(
     content={"error": {"code": "RATE_LIMITED", "message": "Too many requests"}},
 )
 
-_TIER_ANONYMOUS = "anonymous"
-_TIER_USER = "user"
-_TIER_MACHINE = "machine"
-
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     def __init__(
@@ -43,35 +39,42 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         app: ASGIApp,
         limit_anonymous: int = 30,
         limit_user: int = 120,
-        limit_machine: int = 300,
+        limit_azp: int = 600,
+        limit_org: int = 1200,
     ):
         super().__init__(app)
-        self._limit = {
-            _TIER_ANONYMOUS: limit_anonymous,
-            _TIER_USER: limit_user,
-            _TIER_MACHINE: limit_machine,
-        }
+        self._limit_anonymous = limit_anonymous
+        self._limit_user = limit_user
+        self._limit_azp = limit_azp
+        self._limit_org = limit_org
         self._counter = _InMemoryCounter()
 
-    def _identify(self, request: Request) -> tuple[str, str]:
+    def _identify(self, request: Request) -> list[tuple[str, int]]:
+        """Return [(bucket_key, limit)] for every rate-limit axis that applies."""
+        ip = request.client.host if request.client else "unknown"
         auth = request.headers.get("authorization", "")
         if not auth.startswith("Bearer "):
-            ip = request.client.host if request.client else "unknown"
-            return _TIER_ANONYMOUS, f"anon:{ip}"
+            return [(f"anon:{ip}", self._limit_anonymous)]
+
         token = auth.split(" ", 1)[1]
         try:
             claims = decode_and_verify(token)
             sub = claims.get("sub", "unknown")
-            if claims.get("token_type") == "machine":
-                return _TIER_MACHINE, f"machine:{sub}"
-            return _TIER_USER, f"user:{sub}"
+            azp = claims.get("azp", "")
+            org_id = claims.get("org_id", "")
+
+            buckets: list[tuple[str, int]] = [(f"user:{sub}", self._limit_user)]
+            if azp:
+                buckets.append((f"azp:{azp}", self._limit_azp))
+            if org_id:
+                buckets.append((f"org:{org_id}", self._limit_org))
+            return buckets
         except Exception:
-            ip = request.client.host if request.client else "unknown"
-            return _TIER_ANONYMOUS, f"anon:{ip}"
+            return [(f"anon:{ip}", self._limit_anonymous)]
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        tier, key = self._identify(request)
-        count = self._counter.increment(key)
-        if count > self._limit[tier]:
-            return _RATE_LIMITED_RESPONSE
+        for key, limit in self._identify(request):
+            count = self._counter.increment(key)
+            if count > limit:
+                return _RATE_LIMITED_RESPONSE
         return await call_next(request)
