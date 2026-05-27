@@ -11,6 +11,7 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     external_id: Mapped[str] = mapped_column(Text, nullable=False, unique=True, index=True)
+    org_id: Mapped[str] = mapped_column(Text, nullable=False, default="")
     name: Mapped[str | None] = mapped_column(Text)
     email: Mapped[str | None] = mapped_column(Text)
     avatar_url: Mapped[str | None] = mapped_column(Text)

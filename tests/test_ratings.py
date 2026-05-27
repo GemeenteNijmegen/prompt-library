@@ -27,7 +27,7 @@ def test_get_user_rating_not_found(client, auth_headers, db, dev_user):
         title="No Rating",
         description="desc",
         prompt_text="text",
-        status="published",
+        status="published_org",
         visibility="public",
         creator_id=dev_user.id,
     )
@@ -56,7 +56,7 @@ def test_rating_distribution(client, auth_headers, db, dev_user):
         title="Distribution Test",
         description="desc",
         prompt_text="text",
-        status="published",
+        status="published_org",
         visibility="public",
         creator_id=dev_user.id,
     )

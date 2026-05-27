@@ -9,7 +9,7 @@ class PromptCreate(BaseModel):
     prompt_text: str = Field(..., min_length=1)
     example_output: str | None = None
     image_url: str | None = None
-    status: Literal["draft", "published", "archived"] = "draft"
+    status: Literal["draft", "published_org", "published_public", "archived"] = "draft"
     visibility: Literal["public", "internal", "restricted"] = "public"
     featured: bool = False
     category_ids: list[int] = Field(default_factory=list)
@@ -22,7 +22,7 @@ class PromptUpdate(BaseModel):
     prompt_text: str | None = None
     example_output: str | None = None
     image_url: str | None = None
-    status: Literal["draft", "published", "archived"] | None = None
+    status: Literal["draft", "published_org", "published_public", "archived"] | None = None
     visibility: Literal["public", "internal", "restricted"] | None = None
     featured: bool | None = None
     category_ids: list[int] | None = None

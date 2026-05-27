@@ -159,7 +159,7 @@ def sample_prompt(db: Session, dev_user):
         title="Sample Prompt",
         description="A sample description",
         prompt_text="Write something about {topic}",
-        status="published",
+        status="published_org",
         visibility="public",
         featured=False,
         creator_id=dev_user.id,

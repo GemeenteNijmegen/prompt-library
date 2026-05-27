@@ -20,8 +20,9 @@ from src.utils.error import NotFoundError, ConflictError, ForbiddenError, EmbedE
 
 
 _VALID_TRANSITIONS = {
-    "draft": {"published"},
-    "published": {"archived"},
+    "draft": {"published_org"},
+    "published_org": {"published_public", "archived"},
+    "published_public": {"published_org", "archived"},
     "archived": {"draft"},
 }
 
@@ -120,7 +121,7 @@ def _apply_visibility_filters(q, caller, visibility):
     elif caller is None or not caller.has_scope("prompt:read:restricted"):
         q = q.filter(Prompt.visibility != "restricted")
     if caller is None:
-        q = q.filter(Prompt.visibility == "public", Prompt.status == "published")
+        q = q.filter(Prompt.visibility == "public", Prompt.status == "published_org")
     return q
 
 
@@ -333,7 +334,7 @@ def create_prompt(db: Session, data: PromptCreate, caller) -> Prompt:
         tags=tags,
         embedding_vector=embedding_vector,
     )
-    if data.status == "published":
+    if data.status in ("published_org", "published_public"):
         p.published_at = _now()
 
     db.add(p)
@@ -425,7 +426,7 @@ def _apply_status_transition(prompt: Prompt, new_status: str, caller) -> None:
     if not caller.has_scope("prompt:publish"):
         raise ForbiddenError("Requires prompt:publish to change status")
     prompt.status = new_status
-    if new_status == "published":
+    if new_status in ("published_org", "published_public"):
         prompt.published_at = _now()
 
 
@@ -438,7 +439,7 @@ def increment_use_count(db: Session, prompt_id: int) -> None:
 
 
 def list_featured(db: Session, caller=None) -> list[Prompt]:
-    q = _base_query(db).filter(Prompt.featured == True, Prompt.status == "published")
+    q = _base_query(db).filter(Prompt.featured == True, Prompt.status.in_(("published_org", "published_public")))
     if caller is None or not caller.has_scope("prompt:read:restricted"):
         q = q.filter(Prompt.visibility != "restricted")
     if caller is None:

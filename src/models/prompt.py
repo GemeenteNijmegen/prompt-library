@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Integer, Text, Boolean, DateTime, ForeignKey, func
+from sqlalchemy import CheckConstraint, Integer, Text, Boolean, DateTime, ForeignKey, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.models import Base
@@ -9,6 +9,12 @@ from src.models.joins import prompts_categories, prompts_tags
 
 class Prompt(Base):
     __tablename__ = "prompts"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft', 'published_org', 'published_public', 'archived')",
+            name="ck_prompts_status",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(Text, nullable=False, index=True)
