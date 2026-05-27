@@ -483,6 +483,19 @@ def _apply_status_transition(prompt: Prompt, new_status: str, caller) -> None:
         prompt.published_at = _now()
 
 
+def delete_prompt(db: Session, prompt_id: int, caller) -> Prompt:
+    q = _base_query(db).filter(Prompt.id == prompt_id)
+    q = _apply_visibility_filters(q, caller, visibility=None)
+    p = q.first()
+    if not p:
+        raise NotFoundError(f"Prompt {prompt_id} not found")
+    if p.creator_id != caller.id and not caller.has_scope("prompt:moderate"):
+        raise ForbiddenError("Cannot delete another user's prompt")
+    p.deleted_at = _now()
+    db.commit()
+    return p
+
+
 def increment_use_count(db: Session, prompt_id: int) -> None:
     p = db.query(Prompt).filter(Prompt.id == prompt_id, Prompt.deleted_at.is_(None)).first()
     if not p:

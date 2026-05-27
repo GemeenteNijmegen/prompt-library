@@ -3,6 +3,9 @@ from fastapi import APIRouter, Depends
 from src.dependencies import get_current_user
 from src.schemas.user import UserProfile
 
+# Audit hook point: POST /me/api-keys and DELETE /me/api-keys/{id} must call
+# write_event(entity_type="apikey", action="issued"/"revoked") once #36 is merged.
+
 router = APIRouter(tags=["me"])
 
 

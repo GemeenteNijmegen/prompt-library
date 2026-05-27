@@ -8,6 +8,7 @@ from src.dependencies import get_db, get_current_user, get_optional_user
 from src.schemas.prompt import PromptCreate, PromptUpdate
 from src.schemas.rating import RatingSubmit
 from src.services import prompt_service
+from src.services.audit_service import write_event
 from src.utils.error import NotFoundError, ConflictError, ForbiddenError, EmbedError
 
 router = APIRouter(tags=["prompts"])
@@ -111,6 +112,7 @@ def create_prompt(
 ):
     try:
         p = prompt_service.create_prompt(db, data, caller)
+        write_event(db, entity_type="prompt", entity_id=p.id, action="created", caller=caller, details={"title": p.title, "status": p.status})
         cache_delete(f"{_FEATURED_CACHE_KEY}:auth")
         cache_delete(f"{_FEATURED_CACHE_KEY}:anon")
         from src.schemas.prompt import PromptDetail
@@ -128,11 +130,28 @@ def update_prompt(
 ):
     try:
         p = prompt_service.update_prompt(db, prompt_id, data, caller)
+        action = "status_changed" if data.status is not None else "updated"
+        write_event(db, entity_type="prompt", entity_id=p.id, action=action, caller=caller, details={"status": p.status})
         cache_delete(f"{_FEATURED_CACHE_KEY}:auth")
         cache_delete(f"{_FEATURED_CACHE_KEY}:anon")
         from src.schemas.prompt import PromptDetail
         return {"data": PromptDetail.model_validate(p).model_dump()}
     except (NotFoundError, ConflictError, ForbiddenError, EmbedError) as e:
+        _handle(e)
+
+
+@router.delete("/prompts/{prompt_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_prompt(
+    prompt_id: int,
+    db: Session = Depends(get_db),
+    caller=Depends(get_current_user),
+):
+    try:
+        p = prompt_service.delete_prompt(db, prompt_id, caller)
+        write_event(db, entity_type="prompt", entity_id=p.id, action="deleted", caller=caller, details={"title": p.title})
+        cache_delete(f"{_FEATURED_CACHE_KEY}:auth")
+        cache_delete(f"{_FEATURED_CACHE_KEY}:anon")
+    except (NotFoundError, ForbiddenError) as e:
         _handle(e)
 
 
@@ -156,6 +175,7 @@ def submit_rating(
     user = _get_or_create_user(db, caller)
     try:
         r = prompt_service.submit_rating(db, prompt_id, user.id, data.rating)
+        write_event(db, entity_type="rating", entity_id=prompt_id, action="submitted", caller=caller, details={"rating": data.rating})
         from src.schemas.rating import RatingDetail
         return {"data": RatingDetail.model_validate(r).model_dump()}
     except NotFoundError as e:
