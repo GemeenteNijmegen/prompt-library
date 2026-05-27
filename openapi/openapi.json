@@ -1066,6 +1066,25 @@
         ]
       }
     },
+    "/api/v1/me/logout-everywhere": {
+      "post": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Logout Everywhere",
+        "operationId": "logout_everywhere_api_v1_me_logout_everywhere_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/me/api-keys/{key_id}": {
       "delete": {
         "tags": [
