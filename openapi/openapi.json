@@ -1237,7 +1237,8 @@
             "type": "string",
             "enum": [
               "draft",
-              "published",
+              "published_org",
+              "published_public",
               "archived"
             ],
             "title": "Status",
@@ -1346,7 +1347,8 @@
                 "type": "string",
                 "enum": [
                   "draft",
-                  "published",
+                  "published_org",
+                  "published_public",
                   "archived"
                 ]
               },
