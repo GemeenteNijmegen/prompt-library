@@ -182,6 +182,67 @@ def test_anon_list_only_shows_published_public(client, db, dev_user):
 # Status transitions — prompt:publish:public gate
 # ---------------------------------------------------------------------------
 
+def test_publish_org_requires_prompt_publish_scope(client, db, dev_user):
+    """→ published_org transition is blocked (403) without prompt:publish."""
+    from src.models.prompt import Prompt
+    p = Prompt(
+        title="Publish Org Gate Test",
+        description="desc",
+        prompt_text="text",
+        status="draft",
+        visibility="public",
+        featured=False,
+        creator_id=dev_user.id,
+    )
+    db.add(p)
+    db.commit()
+
+    token = make_jwt(scope=["prompt:read", "prompt:write"])
+    r = client.patch(
+        f"/api/v1/prompts/{p.id}",
+        json={"status": "published_org"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 403
+    assert "prompt:publish" in r.json()["detail"]["error"]["message"]
+
+
+def test_create_with_published_org_requires_prompt_publish(client, db, dev_user):
+    """Creating a prompt with published_org status is blocked (403) without prompt:publish."""
+    token = make_jwt(scope=["prompt:read", "prompt:create", "prompt:write"])
+    r = client.post(
+        "/api/v1/prompts",
+        json={
+            "title": "Gate Test Create Org",
+            "description": "desc",
+            "prompt_text": "text",
+            "status": "published_org",
+            "visibility": "public",
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 403
+    assert "prompt:publish" in r.json()["detail"]["error"]["message"]
+
+
+def test_create_with_published_public_requires_publish_public(client, db, dev_user):
+    """Creating a prompt with published_public status is blocked (403) without prompt:publish:public."""
+    token = make_jwt(scope=["prompt:read", "prompt:create", "prompt:write", "prompt:publish"])
+    r = client.post(
+        "/api/v1/prompts",
+        json={
+            "title": "Gate Test Create Public",
+            "description": "desc",
+            "prompt_text": "text",
+            "status": "published_public",
+            "visibility": "public",
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert r.status_code == 403
+    assert "publish:public" in r.json()["detail"]["error"]["message"]
+
+
 def test_publish_public_requires_scope(client, auth_headers, db, dev_user):
     """prompt:publish:public scope is required to transition to published_public."""
     from src.models.prompt import Prompt
