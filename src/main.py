@@ -8,7 +8,7 @@ from src.config import settings
 from src.database import init_db
 from src.middleware.rate_limit import RateLimitMiddleware
 from src.middleware.request_id import RequestIDMiddleware
-from src.routers import health, categories, tags, prompts, auth, uploads
+from src.routers import health, categories, tags, prompts, me, uploads
 
 logging.basicConfig(
     level=settings.LOG_LEVEL.upper(),
@@ -29,6 +29,8 @@ async def lifespan(app: FastAPI):
 def create_app(
     rate_limit_anonymous: int | None = None,
     rate_limit_user: int | None = None,
+    rate_limit_azp: int | None = None,
+    rate_limit_org: int | None = None,
 ) -> FastAPI:
     app = FastAPI(
         title="Prompt Gallery API",
@@ -44,6 +46,8 @@ def create_app(
         RateLimitMiddleware,
         limit_anonymous=rate_limit_anonymous if rate_limit_anonymous is not None else settings.RATE_LIMIT_ANONYMOUS,
         limit_user=rate_limit_user if rate_limit_user is not None else settings.RATE_LIMIT_USER,
+        limit_azp=rate_limit_azp if rate_limit_azp is not None else settings.RATE_LIMIT_CLIENT,
+        limit_org=rate_limit_org if rate_limit_org is not None else settings.RATE_LIMIT_ORG,
     )
 
     app.add_middleware(
@@ -59,7 +63,7 @@ def create_app(
     app.include_router(categories.router, prefix=prefix)
     app.include_router(tags.router, prefix=prefix)
     app.include_router(prompts.router, prefix=prefix)
-    app.include_router(auth.router, prefix=prefix)
+    app.include_router(me.router, prefix=prefix)
     app.include_router(uploads.router, prefix=prefix)
 
     return app

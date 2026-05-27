@@ -198,7 +198,8 @@ class TestHybridSearch:
 
     def test_search_returns_results(self, client, auth_headers):
         self._create_prompt(client, auth_headers, "Python Guide", "A guide to Python", "Write Python code")
-        r = client.get("/api/v1/prompts?search=Python")
+        # Use auth so same-org published_org prompts are visible
+        r = client.get("/api/v1/prompts?search=Python", headers=auth_headers)
         assert r.status_code == 200
         assert r.json()["meta"]["total"] >= 1
 
@@ -209,7 +210,7 @@ class TestHybridSearch:
             title="Unique Keyword Prompt",
             description="desc",
             prompt_text="text",
-            status="published_org",
+            status="published_public",
             visibility="public",
             featured=False,
             creator_id=dev_user.id,

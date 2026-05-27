@@ -116,12 +116,49 @@ def _base_query(db: Session):
 
 
 def _apply_visibility_filters(q, caller, visibility):
+    # Prompt.visibility column gate (public / internal / restricted)
     if visibility:
         q = q.filter(Prompt.visibility == visibility)
     elif caller is None or not caller.has_scope("prompt:read:restricted"):
         q = q.filter(Prompt.visibility != "restricted")
+
+    # Status-based row-level org visibility (CONTEXT.md §Visibility model)
     if caller is None:
-        q = q.filter(Prompt.visibility == "public", Prompt.status == "published_org")
+        # Anonymous callers: published_public + public visibility only
+        q = q.filter(Prompt.status == "published_public", Prompt.visibility == "public")
+        return q
+
+    org_id = getattr(caller, "org_id", "")
+
+    if not org_id:
+        # No org context (dev / seed tokens): own drafts + published_public only
+        from sqlalchemy import and_, or_
+        q = q.filter(or_(
+            Prompt.status == "published_public",
+            and_(Prompt.status == "draft", Prompt.creator_id == caller.id),
+        ))
+        return q
+
+    # Correlated subquery: prompt's author belongs to the caller's org
+    from sqlalchemy import and_, or_, select as sa_select
+    same_org = (
+        sa_select(User.id)
+        .where(User.id == Prompt.creator_id, User.org_id == org_id)
+        .correlate(Prompt)
+        .exists()
+    )
+
+    visible_parts = [
+        Prompt.status == "published_public",
+        and_(Prompt.status == "published_org", same_org),
+    ]
+    if caller.is_org_admin:
+        # Org admins see all drafts from their own org
+        visible_parts.append(and_(Prompt.status == "draft", same_org))
+    else:
+        visible_parts.append(and_(Prompt.status == "draft", Prompt.creator_id == caller.id))
+
+    q = q.filter(or_(*visible_parts))
     return q
 
 
@@ -284,10 +321,10 @@ def list_prompts(
 
 
 def get_prompt(db: Session, prompt_id: int, caller=None) -> Prompt:
-    p = _base_query(db).filter(Prompt.id == prompt_id).first()
+    q = _base_query(db).filter(Prompt.id == prompt_id)
+    q = _apply_visibility_filters(q, caller, visibility=None)
+    p = q.first()
     if not p:
-        raise NotFoundError(f"Prompt {prompt_id} not found")
-    if p.visibility == "restricted" and (caller is None or not caller.has_scope("prompt:read:restricted")):
         raise NotFoundError(f"Prompt {prompt_id} not found")
     p.view_count = (p.view_count or 0) + 1
     db.commit()
@@ -298,7 +335,9 @@ def get_prompt(db: Session, prompt_id: int, caller=None) -> Prompt:
 def create_prompt(db: Session, data: PromptCreate, caller) -> Prompt:
     user = _ensure_user(db, caller)
 
-    if data.status != "draft" and not caller.has_scope("prompt:publish"):
+    if data.status == "published_public" and not caller.has_scope("prompt:publish:public"):
+        raise ForbiddenError("Requires prompt:publish:public to create with published_public status")
+    if data.status not in ("draft", None) and not caller.has_scope("prompt:publish"):
         raise ForbiddenError("Requires prompt:publish to create with non-draft status")
 
     categories = []
@@ -345,7 +384,9 @@ def create_prompt(db: Session, data: PromptCreate, caller) -> Prompt:
 
 
 def update_prompt(db: Session, prompt_id: int, data: PromptUpdate, caller) -> Prompt:
-    p = _base_query(db).filter(Prompt.id == prompt_id).first()
+    q = _base_query(db).filter(Prompt.id == prompt_id)
+    q = _apply_visibility_filters(q, caller, visibility=None)
+    p = q.first()
     if not p:
         raise NotFoundError(f"Prompt {prompt_id} not found")
 
@@ -423,6 +464,8 @@ def _apply_status_transition(prompt: Prompt, new_status: str, caller) -> None:
         raise ConflictError(
             f"Invalid status transition: {prompt.status} → {new_status}"
         )
+    if new_status == "published_public" and not caller.has_scope("prompt:publish:public"):
+        raise ForbiddenError("Requires prompt:publish:public to promote to published_public")
     if not caller.has_scope("prompt:publish"):
         raise ForbiddenError("Requires prompt:publish to change status")
     prompt.status = new_status
@@ -439,11 +482,10 @@ def increment_use_count(db: Session, prompt_id: int) -> None:
 
 
 def list_featured(db: Session, caller=None) -> list[Prompt]:
-    q = _base_query(db).filter(Prompt.featured == True, Prompt.status.in_(("published_org", "published_public")))
-    if caller is None or not caller.has_scope("prompt:read:restricted"):
-        q = q.filter(Prompt.visibility != "restricted")
-    if caller is None:
-        q = q.filter(Prompt.visibility == "public")
+    q = _base_query(db).filter(Prompt.featured == True)
+    q = _apply_visibility_filters(q, caller, visibility=None)
+    # Drafts never appear in featured listings
+    q = q.filter(Prompt.status != "draft")
     return q.order_by(Prompt.created_at.desc()).all()
 
 
