@@ -68,6 +68,22 @@ def test_anon_cannot_see_archived(client, db, dev_user):
     assert r.status_code == 404
 
 
+def test_authenticated_user_sees_published_public(client, db, dev_user):
+    """published_public prompts are visible to authenticated users."""
+    p = _create_prompt(db, dev_user, status="published_public")
+    token = make_jwt(sub="dev-user-001", org_id=TEST_ORG_ID)
+    r = client.get(f"/api/v1/prompts/{p.id}", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 200
+
+
+def test_authenticated_user_cannot_see_archived(client, db, dev_user):
+    """archived prompts are hidden from regular authenticated users."""
+    p = _create_prompt(db, dev_user, status="archived")
+    token = make_jwt(sub="other-user", org_id=TEST_ORG_ID, scope=["prompt:read"])
+    r = client.get(f"/api/v1/prompts/{p.id}", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 404
+
+
 # ---------------------------------------------------------------------------
 # Authenticated — same-org
 # ---------------------------------------------------------------------------

@@ -41,8 +41,8 @@ Prompts have a visibility state that determines who can see them. The state is i
 The row-level filter applied to every read query is conceptually:
 
 ```sql
-WHERE visibility = 'published_public'
-   OR (visibility = 'published_org' AND org_id = :caller_org_id)
+WHERE status = 'published_public'
+   OR (status = 'published_org' AND org_id = :caller_org_id)
    OR (status = 'draft' AND (author_id = :caller_id
                              OR :caller_is_org_admin_of_author_org))
 ```

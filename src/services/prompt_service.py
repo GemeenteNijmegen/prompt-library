@@ -4,7 +4,7 @@ import time
 from datetime import datetime, timezone
 
 import numpy as np
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 log = logging.getLogger(__name__)
@@ -115,6 +115,47 @@ def _base_query(db: Session):
     )
 
 
+def visibility_filter(caller):
+    """Return a SQLAlchemy clause implementing CONTEXT.md §Visibility model.
+
+    published_public
+    OR (published_org AND org_id = caller.org_id)
+    OR (draft AND (author_id = caller.id OR caller is Org Admin of author's org))
+
+    Algorithm whitelist: RS256 for JWKS path, HS256 for HMAC path — do not
+    remove the check in jwt_utils; it prevents algorithm-confusion attacks.
+    """
+    if caller is None:
+        return Prompt.status == "published_public"
+
+    org_id = getattr(caller, "org_id", "")
+
+    if not org_id:
+        return or_(
+            Prompt.status == "published_public",
+            and_(Prompt.status == "draft", Prompt.creator_id == caller.id),
+        )
+
+    # Correlated subquery: prompt's author belongs to the caller's org
+    same_org = (
+        select(User.id)
+        .where(User.id == Prompt.creator_id, User.org_id == org_id)
+        .correlate(Prompt)
+        .exists()
+    )
+
+    parts = [
+        Prompt.status == "published_public",
+        and_(Prompt.status == "published_org", same_org),
+    ]
+    if caller.is_org_admin:
+        parts.append(and_(Prompt.status == "draft", same_org))
+    else:
+        parts.append(and_(Prompt.status == "draft", Prompt.creator_id == caller.id))
+
+    return or_(*parts)
+
+
 def _apply_visibility_filters(q, caller, visibility):
     # Prompt.visibility column gate (public / internal / restricted)
     if visibility:
@@ -122,43 +163,12 @@ def _apply_visibility_filters(q, caller, visibility):
     elif caller is None or not caller.has_scope("prompt:read:restricted"):
         q = q.filter(Prompt.visibility != "restricted")
 
-    # Status-based row-level org visibility (CONTEXT.md §Visibility model)
+    # Anonymous callers: also exclude non-public visibility column
     if caller is None:
-        # Anonymous callers: published_public + public visibility only
-        q = q.filter(Prompt.status == "published_public", Prompt.visibility == "public")
-        return q
+        q = q.filter(Prompt.visibility == "public")
 
-    org_id = getattr(caller, "org_id", "")
-
-    if not org_id:
-        # No org context (dev / seed tokens): own drafts + published_public only
-        from sqlalchemy import and_, or_
-        q = q.filter(or_(
-            Prompt.status == "published_public",
-            and_(Prompt.status == "draft", Prompt.creator_id == caller.id),
-        ))
-        return q
-
-    # Correlated subquery: prompt's author belongs to the caller's org
-    from sqlalchemy import and_, or_, select as sa_select
-    same_org = (
-        sa_select(User.id)
-        .where(User.id == Prompt.creator_id, User.org_id == org_id)
-        .correlate(Prompt)
-        .exists()
-    )
-
-    visible_parts = [
-        Prompt.status == "published_public",
-        and_(Prompt.status == "published_org", same_org),
-    ]
-    if caller.is_org_admin:
-        # Org admins see all drafts from their own org
-        visible_parts.append(and_(Prompt.status == "draft", same_org))
-    else:
-        visible_parts.append(and_(Prompt.status == "draft", Prompt.creator_id == caller.id))
-
-    q = q.filter(or_(*visible_parts))
+    # Status-based row-level org visibility (CONTEXT.md §Visibility model)
+    q = q.filter(visibility_filter(caller))
     return q
 
 
