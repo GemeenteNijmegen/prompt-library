@@ -3,15 +3,16 @@
 #   dev        – same infrastructure + src volume + --reload
 #   simple     – app only, SQLite, no external services
 #   embeddings – full stack using app-with-embeddings image (real ML model bundled)
+#   keycloak   – local Keycloak v26 (RS256 OIDC); combine with dev for full local SSO
 #
 # Usage:
-#   docker compose up                         # full stack  (COMPOSE_PROFILES=full set in .env)
-#   docker compose --profile dev up           # hot-reload
-#   docker compose --profile simple up        # SQLite, single container
-#   docker compose --profile embeddings up    # bundled model, real semantic search
+#   docker compose up                                       # full stack  (COMPOSE_PROFILES=full set in .env)
+#   docker compose --profile dev up                        # hot-reload
+#   docker compose --profile dev --profile keycloak up     # hot-reload + local Keycloak
+#   docker compose --profile simple up                     # SQLite, single container
+#   docker compose --profile embeddings up                 # bundled model, real semantic search
 
 services:
-
   # ── Infrastructure ─────────────────────────────────────────────────────────
 
   postgres:
@@ -58,6 +59,45 @@ services:
       redis:
         condition: service_healthy
 
+  # ── Keycloak (local OIDC / RS256) ─────────────────────────────────────────
+
+  keycloak:
+    profiles: [keycloak]
+    image: quay.io/keycloak/keycloak:26.6.2
+    # start-dev + post-boot kcadm patch: bash /dev/tcp waits for port 8080 without
+    # curl, then retries kcadm.sh (bundled Java CLI, no curl needed) until the admin
+    # API is ready, then sets sslRequired=NONE so the admin console works over HTTP.
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        /opt/keycloak/bin/kc.sh start-dev --import-realm &
+        kc_pid=$$!
+        until (echo >/dev/tcp/127.0.0.1/8080) 2>/dev/null; do sleep 2; done
+        until /opt/keycloak/bin/kcadm.sh config credentials \
+          --server http://127.0.0.1:8080 --realm master \
+          --user "$$KC_BOOTSTRAP_ADMIN_USERNAME" \
+          --password "$$KC_BOOTSTRAP_ADMIN_PASSWORD" 2>/dev/null; \
+        do sleep 2; done
+        /opt/keycloak/bin/kcadm.sh update realms/master -s sslRequired=NONE
+        wait $$kc_pid
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      # KC_DB=dev-mem is the image default for start-dev; no need to set it here.
+      # start-dev uses the request URL as issuer — tokens from localhost:8080 carry
+      # iss=http://localhost:8080/realms/gallery.  The gallery app fetches JWKS from
+      # http://keycloak:8080 (compose-internal); JWT_ISSUER must be the external URL.
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import:ro
+    healthcheck:
+      test: ["CMD", "/bin/bash", "-c", "(echo >/dev/tcp/localhost/8080) 2>/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+
   # ── App: dev (src volume + hot-reload) ─────────────────────────────────────
 
   app-dev:
@@ -84,6 +124,9 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      keycloak:
+        condition: service_healthy
+        required: false
 
   # ── App: simple (SQLite, no external services) ─────────────────────────────
 

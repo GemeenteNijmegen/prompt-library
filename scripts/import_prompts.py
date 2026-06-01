@@ -15,8 +15,8 @@ from src.models.prompt import Prompt
 SOURCE_URL = "https://leiden-ai-challenge-8af72d90acde.herokuapp.com/api/prompts"
 
 STATUS_MAP = {
-    "gepubliceerd": "published",
-    "published": "published",
+    "gepubliceerd": "published_public",
+    "published": "published_public",
     "draft": "draft",
     "archived": "archived",
 }
@@ -62,7 +62,7 @@ def import_prompts(user_id: int, dry_run: bool) -> None:
             prompt = Prompt(
                 title=title,
                 description=item["description"],
-                prompt_text=item["description"],
+                prompt_text=item.get("prompt_text", item["description"]),
                 status=status,
                 visibility="public",
                 featured=item.get("featured", False),

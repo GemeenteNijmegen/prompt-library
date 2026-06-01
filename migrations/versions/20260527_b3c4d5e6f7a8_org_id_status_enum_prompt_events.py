@@ -39,13 +39,11 @@ def upgrade() -> None:
     op.execute("UPDATE prompts SET status = 'published_org' WHERE status = 'published'")
 
     # 3. Add CHECK constraint to prompts.status.
-    #    SQLite does not support ADD CONSTRAINT via ALTER TABLE, so batch mode
-    #    recreates the table.
-    with op.batch_alter_table('prompts', recreate='always') as batch_op:
-        batch_op.create_check_constraint(
-            'ck_prompts_status',
-            "status IN ('draft', 'published_org', 'published_public', 'archived')",
-        )
+    op.create_check_constraint(
+        'ck_prompts_status',
+        'prompts',
+        "status IN ('draft', 'published_org', 'published_public', 'archived')",
+    )
 
     # 4. Create prompt_events with the four indexes from PLAN.md §Data Model.
     #    entity_id is TEXT (not INT) to accommodate non-integer IDs such as
@@ -98,9 +96,7 @@ def downgrade() -> None:
     op.drop_index('idx_prompt_events_actor_user', table_name='prompt_events')
     op.drop_table('prompt_events')
 
-    # Remove the CHECK constraint; batch recreates the table in SQLite.
-    with op.batch_alter_table('prompts', recreate='always') as batch_op:
-        batch_op.drop_constraint('ck_prompts_status', type_='check')
+    op.drop_constraint('ck_prompts_status', 'prompts', type_='check')
 
     # Revert status values: published_org and published_public both collapse
     # back to 'published' (the only published state in the previous schema).
@@ -109,5 +105,4 @@ def downgrade() -> None:
         "WHERE status IN ('published_org', 'published_public')"
     )
 
-    with op.batch_alter_table('users') as batch_op:
-        batch_op.drop_column('org_id')
+    op.drop_column('users', 'org_id')

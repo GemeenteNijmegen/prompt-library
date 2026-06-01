@@ -28,6 +28,9 @@ include = ["src*"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "smoke: live-stack integration tests (require KEYCLOAK_URL and GALLERY_API_URL)",
+]
 
 [tool.coverage.run]
 source = ["src"]
