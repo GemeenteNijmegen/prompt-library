@@ -24,24 +24,51 @@ docker-compose up
 
 This starts the API, PostgreSQL, and Redis. Configuration is read from `.env`.
 
-There are three additional docker compose profiles:
+There are several Docker Compose profiles:
 
-For hot-reloading dev-setup:
+| Profile | What starts | Use case |
+|---|---|---|
+| `full` (default) | Postgres + Redis + app | Production-like |
+| `dev` | Postgres + Redis + app (hot-reload) | Day-to-day development |
+| `dev` + `keycloak` | + local Keycloak v26 (RS256) | Full local SSO, smoke testing |
+| `simple` | app only (SQLite) | Lightweight / no infra |
+| `embeddings` | Postgres + Redis + app (model bundled) | Real semantic search |
 
+**Hot-reload dev (HS256 stub tokens):**
+
+```bash
+docker compose --profile dev up
 ```
-docker-compose up --profile dev
+
+**Hot-reload dev with local Keycloak (RS256):**
+
+```bash
+# Uncomment the Keycloak block in .env.example and copy to .env first
+docker compose --profile dev --profile keycloak up
 ```
 
-If you just want to run the prompt gallery:
+Keycloak is available at http://localhost:8080 (admin / admin). The gallery realm is imported automatically on first start (~15–25 s cold boot). Once the stack is up, fetch a token and hit the API:
 
-```
-docker-compose up --profile simple
+```bash
+# RS256 token via service account (gallery-test-client):
+TOKEN=$(python scripts/keycloak_token.py)
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/me
+
+# Or as the dev user (devuser / devpass):
+TOKEN=$(python scripts/keycloak_token.py --grant password --username devuser --password devpass)
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/me
 ```
 
-For real semantic search with the bundled ML model (requires building `app-with-embeddings`):
+**Lightweight (SQLite, no external services):**
 
+```bash
+docker compose --profile simple up
 ```
-docker-compose --profile embeddings up
+
+**Real semantic search with the bundled ML model:**
+
+```bash
+docker compose --profile embeddings up
 ```
 
 This starts Postgres, Redis, and the `app-with-embeddings` image which has `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` weights pre-baked in. The default (`full`) profile uses the slim image with `EMBEDDING_USE_FAKE=false` (fastembed downloads on first use if model is not cached).
@@ -65,6 +92,63 @@ The `app-with-embeddings` image is automatically published to GHCR on each relea
 ```bash
 pip install -r requirements-dev.txt
 pytest tests/ -v
+```
+
+### Smoke tests (live Keycloak + gallery API)
+
+The smoke tests in `tests/smoke/` require a real running stack. They are **skipped automatically** in normal `pytest` runs unless you export both env vars below.
+
+**Step 1 — start Keycloak** (no Docker needed; use the Keycloak zip):
+
+```bash
+# Download once:
+curl -LO https://github.com/keycloak/keycloak/releases/download/26.2.5/keycloak-26.2.5.zip
+unzip keycloak-26.2.5.zip
+
+# Start with the dev realm pre-loaded:
+KC_BOOTSTRAP_ADMIN_USERNAME=admin \
+KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
+KC_HTTP_ENABLED=true \
+KC_HOSTNAME_URL=http://localhost:8080 \
+  keycloak-26.2.5/bin/kc.sh start-dev \
+    --import-realm \
+    --import-realm-file keycloak/realm-export.json
+```
+
+Keycloak is ready when `http://localhost:8080/health/ready` returns `{"status":"UP"}` (cold start ~15–25 s).
+
+**Step 2 — start the gallery API** with RS256 mode enabled:
+
+```bash
+JWKS_URI=http://localhost:8080/realms/gallery/protocol/openid-connect/certs \
+JWT_ISSUER=http://localhost:8080/realms/gallery \
+JWT_AUDIENCE=prompt-gallery-api \
+ENVIRONMENT=development \
+EMBEDDING_USE_FAKE=true \
+  uvicorn src.main:app --port 8000
+```
+
+**Step 3 — run the smoke tests:**
+
+```bash
+KEYCLOAK_URL=http://localhost:8080 \
+GALLERY_API_URL=http://localhost:8000 \
+  pytest tests/smoke -m smoke -v
+```
+
+What the smoke tests verify:
+- A real RS256 token (client-credentials grant from `gallery-test-client`) is accepted by `GET /me` → 200.
+- A stale HS256 token is rejected with 401 when `JWKS_URI` is active.
+- A password-grant RS256 token for `devuser` / `devpass` is also accepted.
+
+You can also get a token manually for `curl`:
+
+```bash
+# client-credentials (service account):
+python scripts/keycloak_token.py
+
+# password grant (dev user):
+python scripts/keycloak_token.py --grant password --username devuser --password devpass
 ```
 
 ## Authentication

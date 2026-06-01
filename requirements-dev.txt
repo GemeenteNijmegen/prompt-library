@@ -4,3 +4,4 @@ pytest-asyncio>=0.23
 pytest-cov>=5.0
 anyio>=4.3
 moto[s3]>=5.0
+respx>=0.21
