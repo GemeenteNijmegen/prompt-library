@@ -19,6 +19,8 @@
   "revokeRefreshToken": true,
   "refreshTokenMaxReuse": 0,
 
+  "organizationsEnabled": true,
+
   "clientScopes": [
     {
       "name": "prompt:read",
@@ -87,8 +89,55 @@
     }
   ],
 
+  "roles": {
+    "realm": [
+      {
+        "name": "viewer",
+        "description": "Read-only access: prompt:read",
+        "composite": false
+      },
+      {
+        "name": "contributor",
+        "description": "viewer + prompt:create prompt:write prompt:rate prompt:image",
+        "composite": true,
+        "composites": { "realm": ["viewer"] }
+      },
+      {
+        "name": "publisher",
+        "description": "contributor + prompt:publish",
+        "composite": true,
+        "composites": { "realm": ["contributor"] }
+      },
+      {
+        "name": "admin",
+        "description": "publisher + prompt:read:restricted prompt:publish:public prompt:moderate admin:*",
+        "composite": true,
+        "composites": { "realm": ["publisher"] }
+      }
+    ]
+  },
+
+  "groups": [
+    {
+      "name": "gallery-ops",
+      "path": "/gallery-ops"
+    }
+  ],
+
   "clients": [
     {
+      "_comment": "1/5 — API anchor: bearer-only resource server; defines the audience for all tokens",
+      "clientId": "gallery-api",
+      "enabled": true,
+      "publicClient": false,
+      "bearerOnly": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false
+    },
+
+    {
+      "_comment": "2/5 — dev-CLI / SPA: public client for local development and interactive login",
       "clientId": "gallery-app",
       "enabled": true,
       "publicClient": true,
@@ -115,6 +164,17 @@
         "admin:read_audit"
       ],
       "protocolMappers": [
+        {
+          "name": "gallery-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "prompt-gallery-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        },
         {
           "name": "sub",
           "protocol": "openid-connect",
@@ -152,7 +212,98 @@
         }
       ]
     },
+
     {
+      "_comment": "3/5 — org-deploy-example: confidential client simulating an Organisation-deployed integration.",
+      "_comment_dcr": "DCR-restricted scopes (admin:*, prompt:publish:public, prompt:moderate) are intentionally absent from optionalClientScopes — structural prevention, not a client policy.",
+      "clientId": "org-deploy-example",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "org-deploy-secret",
+      "directAccessGrantsEnabled": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": true,
+      "redirectUris": ["http://localhost:9999/*"],
+      "webOrigins": [],
+      "defaultClientScopes": ["openid", "profile", "email"],
+      "optionalClientScopes": [
+        "prompt:read",
+        "prompt:create",
+        "prompt:write",
+        "prompt:publish",
+        "prompt:rate",
+        "prompt:image",
+        "apikey:create"
+      ],
+      "protocolMappers": [
+        {
+          "name": "gallery-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "prompt-gallery-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ]
+    },
+
+    {
+      "_comment": "4/5 — gallery-apikey-issuer: server-side confidential client for API-key (offline token) issuance.",
+      "clientId": "gallery-apikey-issuer",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "apikey-issuer-secret",
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": true,
+      "defaultClientScopes": ["openid", "profile", "email"],
+      "optionalClientScopes": [
+        "prompt:read",
+        "prompt:read:restricted",
+        "prompt:create",
+        "prompt:write",
+        "prompt:publish",
+        "prompt:publish:public",
+        "prompt:rate",
+        "prompt:image",
+        "prompt:moderate",
+        "apikey:create",
+        "admin:manage_taxonomy",
+        "admin:manage_users",
+        "admin:read_audit"
+      ],
+      "protocolMappers": [
+        {
+          "name": "gallery-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "prompt-gallery-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        },
+        {
+          "name": "sub",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-sub-mapper",
+          "consentRequired": false,
+          "config": {
+            "access.token.claim": "true",
+            "id.token.claim": "true"
+          }
+        }
+      ]
+    },
+
+    {
+      "_comment": "5/5 — gallery-test-client: admin service account used by smoke tests and integration tools. Holds all scopes.",
       "clientId": "gallery-test-client",
       "enabled": true,
       "publicClient": false,
@@ -179,6 +330,17 @@
         "admin:read_audit"
       ],
       "protocolMappers": [
+        {
+          "name": "gallery-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "prompt-gallery-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        },
         {
           "name": "sub",
           "protocol": "openid-connect",
@@ -218,14 +380,37 @@
     }
   ],
 
+  "organizations": [
+    {
+      "id": "00000000-0000-0001-0000-000000000001",
+      "name": "org-a",
+      "alias": "org-a",
+      "enabled": true,
+      "description": "Test organisation A — cross-org isolation tests",
+      "attributes": {},
+      "domains": []
+    },
+    {
+      "id": "00000000-0000-0001-0000-000000000002",
+      "name": "org-b",
+      "alias": "org-b",
+      "enabled": true,
+      "description": "Test organisation B — cross-org isolation tests",
+      "attributes": {},
+      "domains": []
+    }
+  ],
+
   "users": [
     {
+      "_comment": "Legacy dev user — kept for smoke-test backwards compatibility (KEYCLOAK_DEV_USERNAME=devuser, password=devpass)",
       "username": "devuser",
       "email": "dev@example.com",
       "firstName": "Dev",
       "lastName": "User",
       "enabled": true,
       "emailVerified": true,
+      "realmRoles": ["admin"],
       "credentials": [
         {
           "type": "password",
@@ -233,6 +418,63 @@
           "secretData": "{\"value\":\"eLGya7UslZUzHWumacx7wWSonEAxAeVyELQ4gci2mE4=\",\"salt\":\"q83vASNFZ4mrze8BI0VniQ==\",\"additionalParameters\":{}}",
           "credentialData": "{\"hashIterations\":27500,\"algorithm\":\"pbkdf2-sha256\",\"additionalParameters\":{}}"
         }
+      ]
+    },
+    {
+      "_comment": "alice — org-a contributor. Tests: own-org read/write, no cross-org access, no admin scopes.",
+      "id": "00000000-0000-0000-0000-000000000001",
+      "username": "alice",
+      "email": "alice@org-a.example",
+      "firstName": "Alice",
+      "lastName": "OrgA",
+      "enabled": true,
+      "emailVerified": true,
+      "realmRoles": ["contributor"],
+      "credentials": [
+        { "type": "password", "temporary": false, "value": "dev" }
+      ]
+    },
+    {
+      "_comment": "bob — org-b viewer. Tests: read-only access, cross-org isolation (cannot see org-a private prompts).",
+      "id": "00000000-0000-0000-0000-000000000002",
+      "username": "bob",
+      "email": "bob@org-b.example",
+      "firstName": "Bob",
+      "lastName": "OrgB",
+      "enabled": true,
+      "emailVerified": true,
+      "realmRoles": ["viewer"],
+      "credentials": [
+        { "type": "password", "temporary": false, "value": "dev" }
+      ]
+    },
+    {
+      "_comment": "carol — org-b publisher. Tests: publish within org-b, cannot publish:public (DCR-restricted) without admin.",
+      "id": "00000000-0000-0000-0000-000000000003",
+      "username": "carol",
+      "email": "carol@org-b.example",
+      "firstName": "Carol",
+      "lastName": "OrgB",
+      "enabled": true,
+      "emailVerified": true,
+      "realmRoles": ["publisher"],
+      "credentials": [
+        { "type": "password", "temporary": false, "value": "dev" }
+      ]
+    },
+    {
+      "_comment": "dave — gallery-ops admin. Tests: cross-org operations, admin scopes, audit log access.",
+      "id": "00000000-0000-0000-0000-000000000004",
+      "username": "dave",
+      "email": "dave@gallery-ops.example",
+      "firstName": "Dave",
+      "lastName": "GalleryOps",
+      "enabled": true,
+      "emailVerified": true,
+      "realmRoles": ["admin"],
+      "groups": ["/gallery-ops"],
+      "credentials": [
+        { "type": "password", "temporary": false, "value": "dev" }
       ]
     }
   ]
