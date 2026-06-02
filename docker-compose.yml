@@ -125,6 +125,7 @@ services:
       REDIS_URL: redis://redis:6379
       ENVIRONMENT: development
       LOG_LEVEL: debug
+      EMBEDDING_USE_FAKE: "true"
     volumes:
       - ./src:/app/src
       - ./migrations:/app/migrations
