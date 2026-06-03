@@ -17,12 +17,20 @@ from src.models import Base
 from src.main import create_app
 from src.dependencies import get_db
 
-# pydantic-settings v2 treats an empty-string env var as "not provided" and
-# lets a non-empty .env file value win. Override the singleton directly so
-# tests always use the HMAC fallback regardless of the local .env file.
-from src.config import settings as _app_settings
-_app_settings.JWKS_URI = ""
-_app_settings.JWT_SECRET_KEY = "test-secret-key"
+# pydantic-settings v2 singleton mutation is unreliable (the model may re-read
+# from the dotenv source). Replace the `settings` reference inside jwt_utils
+# directly so decode_and_verify always uses the HMAC fallback in tests.
+from src.utils import jwt_utils as _jwt_utils
+
+class _TestSettings:
+    JWKS_URI = ""
+    JWT_SECRET_KEY = "test-secret-key"
+    JWT_ISSUER = ""
+    JWT_AUDIENCE = "prompt-gallery-api"
+    JWT_LEEWAY_SECONDS = 60
+    ENVIRONMENT = "testing"
+
+_jwt_utils.settings = _TestSettings()
 
 TEST_DB_URL = "sqlite:///:memory:"
 _JWT_SECRET = "test-secret-key"
