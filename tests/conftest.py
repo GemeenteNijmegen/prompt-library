@@ -28,6 +28,7 @@ class _TestSettings:
     JWT_ISSUER = ""
     JWT_AUDIENCE = "prompt-gallery-api"
     JWT_LEEWAY_SECONDS = 60
+    JWKS_CACHE_TTL_SECONDS = 3600
     ENVIRONMENT = "testing"
 
 _jwt_utils.settings = _TestSettings()

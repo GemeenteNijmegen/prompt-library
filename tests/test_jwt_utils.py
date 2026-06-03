@@ -46,21 +46,27 @@ def _make_token(secret=SECRET, issuer=ISSUER, audience=AUDIENCE, expired=False, 
 
 @pytest.fixture(autouse=True)
 def _reset_cache_and_settings():
-    _jwks_cache.clear()
-    from src import config as cfg
-    original_jwks_uri = cfg.settings.JWKS_URI
-    original_secret = cfg.settings.JWT_SECRET_KEY
-    original_env = cfg.settings.ENVIRONMENT
-    original_audience = cfg.settings.JWT_AUDIENCE
-    cfg.settings.JWKS_URI = ""
-    cfg.settings.JWT_SECRET_KEY = SECRET
-    cfg.settings.ENVIRONMENT = "testing"
-    cfg.settings.JWT_AUDIENCE = AUDIENCE
+    import src.utils.jwt_utils as jwt_mod
+    jwt_mod._jwks_cache.clear()
+    jwt_mod._stale_jwks = None
+    original_jwks_uri = jwt_mod.settings.JWKS_URI
+    original_secret = jwt_mod.settings.JWT_SECRET_KEY
+    original_env = jwt_mod.settings.ENVIRONMENT
+    original_audience = jwt_mod.settings.JWT_AUDIENCE
+    original_ttl = jwt_mod.settings.JWKS_CACHE_TTL_SECONDS
+    jwt_mod.settings.JWKS_URI = ""
+    jwt_mod.settings.JWT_SECRET_KEY = SECRET
+    jwt_mod.settings.ENVIRONMENT = "testing"
+    jwt_mod.settings.JWT_AUDIENCE = AUDIENCE
+    jwt_mod.settings.JWKS_CACHE_TTL_SECONDS = 3600
     yield
-    cfg.settings.JWKS_URI = original_jwks_uri
-    cfg.settings.JWT_SECRET_KEY = original_secret
-    cfg.settings.ENVIRONMENT = original_env
-    cfg.settings.JWT_AUDIENCE = original_audience
+    jwt_mod._jwks_cache.clear()
+    jwt_mod._stale_jwks = None
+    jwt_mod.settings.JWKS_URI = original_jwks_uri
+    jwt_mod.settings.JWT_SECRET_KEY = original_secret
+    jwt_mod.settings.ENVIRONMENT = original_env
+    jwt_mod.settings.JWT_AUDIENCE = original_audience
+    jwt_mod.settings.JWKS_CACHE_TTL_SECONDS = original_ttl
 
 
 def test_wrong_audience_raises_jwt_invalid_error():
@@ -70,7 +76,6 @@ def test_wrong_audience_raises_jwt_invalid_error():
 
 
 def test_wrong_audience_rejected_on_jwks_path(monkeypatch):
-    from src import config as cfg
     import src.utils.jwt_utils as jwt_mod
     from cryptography.hazmat.primitives.asymmetric import rsa
     from cryptography.hazmat.backends import default_backend
@@ -91,8 +96,8 @@ def test_wrong_audience_rejected_on_jwks_path(monkeypatch):
         headers={"kid": "test-kid"},
     )
 
-    cfg.settings.JWKS_URI = "http://keycloak.example/certs"
-    cfg.settings.JWT_ISSUER = ISSUER
+    jwt_mod.settings.JWKS_URI = "http://keycloak.example/certs"
+    jwt_mod.settings.JWT_ISSUER = ISSUER
     monkeypatch.setattr("src.utils.jwt_utils._fetch_jwks", lambda: jwks)
 
     with pytest.raises(JWTInvalidError):
@@ -154,27 +159,26 @@ def test_wrong_secret_raises_jwt_invalid_error():
 
 
 def test_no_config_raises_jwt_config_error():
-    from src import config as cfg
-    cfg.settings.JWT_SECRET_KEY = ""
-    cfg.settings.JWKS_URI = ""
+    import src.utils.jwt_utils as jwt_mod
+    jwt_mod.settings.JWT_SECRET_KEY = ""
+    jwt_mod.settings.JWKS_URI = ""
     with pytest.raises(JWTConfigError):
         decode_and_verify(_make_token())
 
 
 def test_hmac_refused_in_production():
-    from src import config as cfg
-    cfg.settings.ENVIRONMENT = "production"
-    cfg.settings.JWKS_URI = ""
+    import src.utils.jwt_utils as jwt_mod
+    jwt_mod.settings.ENVIRONMENT = "production"
+    jwt_mod.settings.JWKS_URI = ""
     with pytest.raises(JWTConfigError, match="not allowed in production"):
         decode_and_verify(_make_token())
 
 
 def test_jwks_cache_ttl_respects_settings(monkeypatch):
-    from src import config as cfg
     import src.utils.jwt_utils as jwt_mod
 
-    cfg.settings.JWKS_URI = "http://keycloak.example/certs"
-    cfg.settings.JWKS_CACHE_TTL_SECONDS = 42
+    jwt_mod.settings.JWKS_URI = "http://keycloak.example/certs"
+    jwt_mod.settings.JWKS_CACHE_TTL_SECONDS = 42
 
     monkeypatch.setattr("httpx.get", lambda *a, **kw: MagicMock(
         raise_for_status=MagicMock(), json=MagicMock(return_value={"keys": []})
@@ -210,11 +214,10 @@ def _make_rsa_jwks_and_token(kid="k1", audience=AUDIENCE, issuer=ISSUER):
 
 
 def test_unknown_kid_triggers_cache_invalidate_and_refetch(monkeypatch):
-    from src import config as cfg
     import src.utils.jwt_utils as jwt_mod
 
-    cfg.settings.JWKS_URI = "http://keycloak.example/certs"
-    cfg.settings.JWT_ISSUER = ISSUER
+    jwt_mod.settings.JWKS_URI = "http://keycloak.example/certs"
+    jwt_mod.settings.JWT_ISSUER = ISSUER
 
     stale_jwks = {"keys": []}  # old keys — missing the signing key
     fresh_jwks, token = _make_rsa_jwks_and_token()
@@ -239,11 +242,10 @@ def test_unknown_kid_triggers_cache_invalidate_and_refetch(monkeypatch):
 
 
 def test_unknown_kid_refetch_still_fails_raises_jwt_invalid(monkeypatch):
-    from src import config as cfg
     import src.utils.jwt_utils as jwt_mod
 
-    cfg.settings.JWKS_URI = "http://keycloak.example/certs"
-    cfg.settings.JWT_ISSUER = ISSUER
+    jwt_mod.settings.JWKS_URI = "http://keycloak.example/certs"
+    jwt_mod.settings.JWT_ISSUER = ISSUER
 
     _, token = _make_rsa_jwks_and_token(kid="k1")
     wrong_jwks, _ = _make_rsa_jwks_and_token(kid="k2")  # different key — still won't verify k1-signed token
@@ -268,11 +270,10 @@ def test_unknown_kid_refetch_still_fails_raises_jwt_invalid(monkeypatch):
 
 def test_stale_jwks_served_when_keycloak_unreachable(monkeypatch, caplog):
     import logging
-    from src import config as cfg
     import src.utils.jwt_utils as jwt_mod
 
-    cfg.settings.JWKS_URI = "http://keycloak.example/certs"
-    cfg.settings.JWT_ISSUER = ISSUER
+    jwt_mod.settings.JWKS_URI = "http://keycloak.example/certs"
+    jwt_mod.settings.JWT_ISSUER = ISSUER
 
     jwks, token = _make_rsa_jwks_and_token()
 
@@ -295,10 +296,9 @@ def test_stale_jwks_served_when_keycloak_unreachable(monkeypatch, caplog):
 
 
 def test_fail_closed_when_cache_cold_and_keycloak_unreachable(monkeypatch):
-    from src import config as cfg
     import src.utils.jwt_utils as jwt_mod
 
-    cfg.settings.JWKS_URI = "http://keycloak.example/certs"
+    jwt_mod.settings.JWKS_URI = "http://keycloak.example/certs"
     jwt_mod._jwks_cache.clear()
     jwt_mod._stale_jwks = None  # no prior successful fetch
 
@@ -309,8 +309,8 @@ def test_fail_closed_when_cache_cold_and_keycloak_unreachable(monkeypatch):
 
 
 def test_jwks_cache_not_refetched_within_ttl():
-    from src import config as cfg
-    cfg.settings.JWKS_URI = "http://example.com/.well-known/jwks.json"
+    import src.utils.jwt_utils as jwt_mod
+    jwt_mod.settings.JWKS_URI = "http://example.com/.well-known/jwks.json"
 
     fake_jwks = {"keys": []}
 
@@ -324,11 +324,10 @@ def test_jwks_cache_not_refetched_within_ttl():
 
 
 def test_jwks_endpoint_cached(monkeypatch):
-    from src import config as cfg
     import src.utils.jwt_utils as jwt_mod
 
-    cfg.settings.JWKS_URI = "http://example.com/.well-known/jwks.json"
-    cfg.settings.JWT_ISSUER = ISSUER
+    jwt_mod.settings.JWKS_URI = "http://example.com/.well-known/jwks.json"
+    jwt_mod.settings.JWT_ISSUER = ISSUER
 
     jwks, token = _make_rsa_jwks_and_token()
 
