@@ -70,7 +70,7 @@ services:
     entrypoint: ["/bin/bash", "-c"]
     command:
       - |
-        /opt/keycloak/bin/kc.sh start-dev --import-realm &
+        /opt/keycloak/bin/kc.sh start-dev --import-realm --features=token-exchange &
         kc_pid=$$!
         until (echo >/dev/tcp/127.0.0.1/8080) 2>/dev/null; do sleep 2; done
         until /opt/keycloak/bin/kcadm.sh config credentials \

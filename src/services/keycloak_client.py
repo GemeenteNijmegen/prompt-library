@@ -44,7 +44,7 @@ class KeycloakClient:
                     "client_secret": settings.KEYCLOAK_API_KEY_CLIENT_SECRET,
                     "subject_token": user_access_token,
                     "subject_token_type": "urn:ietf:params:oauth:token-type:access_token",
-                    "requested_token_type": "urn:ietf:params:oauth:token-type:refresh_token",
+                    "requested_token_type": "urn:ietf:params:oauth:token-type:access_token",
                     "scope": "offline_access",
                 },
                 timeout=10.0,
@@ -53,8 +53,8 @@ class KeycloakClient:
             _log.warning("Keycloak token exchange request failed: %s", exc)
             raise KeycloakError(f"Keycloak unreachable: {exc}") from exc
         if resp.status_code != 200:
-            _log.warning("Keycloak token exchange failed status=%s", resp.status_code)
-            raise KeycloakError(f"Keycloak token exchange failed: {resp.status_code}")
+            _log.warning("Keycloak token exchange failed status=%s body=%s", resp.status_code, resp.text)
+            raise KeycloakError(f"Keycloak token exchange failed: {resp.status_code} — {resp.text}")
 
         data = resp.json()
         offline_token: str = data["refresh_token"]
