@@ -22,6 +22,10 @@ _KC_CLIENT_SECRET = os.environ.get("KEYCLOAK_TEST_CLIENT_SECRET", "test-client-s
 _KC_USERNAME = os.environ.get("KEYCLOAK_DEV_USERNAME", "devuser")
 _KC_PASSWORD = os.environ.get("KEYCLOAK_DEV_PASSWORD", "devpass")
 
+# DCR-restricted org-deployment client (passwords fixed in realm-export.json)
+_KC_ORG_CLIENT_ID = os.environ.get("KEYCLOAK_ORG_CLIENT_ID", "org-deploy-example")
+_KC_ORG_CLIENT_SECRET = os.environ.get("KEYCLOAK_ORG_CLIENT_SECRET", "org-deploy-secret")
+
 # Seeded cross-org users (passwords fixed in realm-export.json)
 _KC_ALICE_USERNAME = os.environ.get("KEYCLOAK_ALICE_USERNAME", "alice")
 _KC_ALICE_PASSWORD = os.environ.get("KEYCLOAK_ALICE_PASSWORD", "dev")
@@ -112,4 +116,16 @@ def bob_token(kc_url: str) -> str:
         grant_type="password",
         username=_KC_BOB_USERNAME,
         password=_KC_BOB_PASSWORD,
+    )
+
+
+@pytest.fixture(scope="session")
+def org_deploy_token(kc_url: str) -> str:
+    """Token for the org-deploy-example client — DCR-restricted, no admin/publish/moderate scopes."""
+    return _fetch_token_or_skip(
+        keycloak_url=kc_url,
+        realm=_KC_REALM,
+        client_id=_KC_ORG_CLIENT_ID,
+        client_secret=_KC_ORG_CLIENT_SECRET,
+        grant_type="client_credentials",
     )
