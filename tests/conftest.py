@@ -17,6 +17,22 @@ from src.models import Base
 from src.main import create_app
 from src.dependencies import get_db
 
+# pydantic-settings v2 singleton mutation is unreliable (the model may re-read
+# from the dotenv source). Replace the `settings` reference inside jwt_utils
+# directly so decode_and_verify always uses the HMAC fallback in tests.
+from src.utils import jwt_utils as _jwt_utils
+
+class _TestSettings:
+    JWKS_URI = ""
+    JWT_SECRET_KEY = "test-secret-key"
+    JWT_ISSUER = ""
+    JWT_AUDIENCE = "prompt-gallery-api"
+    JWT_LEEWAY_SECONDS = 60
+    JWKS_CACHE_TTL_SECONDS = 3600
+    ENVIRONMENT = "testing"
+
+_jwt_utils.settings = _TestSettings()
+
 TEST_DB_URL = "sqlite:///:memory:"
 _JWT_SECRET = "test-secret-key"
 _JWT_ISSUER = "http://localhost:9000"
