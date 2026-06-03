@@ -256,8 +256,12 @@
       "standardFlowEnabled": false,
       "implicitFlowEnabled": false,
       "serviceAccountsEnabled": true,
+      "attributes": {
+        "standard.token.exchange.enabled": "true"
+      },
       "defaultClientScopes": ["openid", "profile", "email"],
       "optionalClientScopes": [
+        "offline_access",
         "prompt:read",
         "prompt:read:restricted",
         "prompt:create",
