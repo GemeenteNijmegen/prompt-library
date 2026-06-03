@@ -126,6 +126,15 @@ services:
       ENVIRONMENT: development
       LOG_LEVEL: debug
       EMBEDDING_USE_FAKE: "true"
+      # Keycloak integration — values mirror keycloak/realm-export.json.
+      # KEYCLOAK_URL uses the compose-internal hostname; JWT_ISSUER uses the
+      # external URL that Keycloak embeds in tokens (iss claim).
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: gallery
+      KEYCLOAK_API_KEY_CLIENT_ID: gallery-apikey-issuer
+      KEYCLOAK_API_KEY_CLIENT_SECRET: apikey-issuer-secret
+      KEYCLOAK_ADMIN_CLIENT_ID: gallery-test-client
+      KEYCLOAK_ADMIN_CLIENT_SECRET: test-client-secret
     volumes:
       - ./src:/app/src
       - ./migrations:/app/migrations

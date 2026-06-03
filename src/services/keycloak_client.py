@@ -35,19 +35,23 @@ class KeycloakClient:
         raw JWT to hand back to the caller exactly once, and ``session_id`` is
         the Keycloak session identifier stored for later revocation.
         """
-        resp = httpx.post(
-            self._token_url(),
-            data={
-                "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
-                "client_id": settings.KEYCLOAK_API_KEY_CLIENT_ID,
-                "client_secret": settings.KEYCLOAK_API_KEY_CLIENT_SECRET,
-                "subject_token": user_access_token,
-                "subject_token_type": "urn:ietf:params:oauth:token-type:access_token",
-                "requested_token_type": "urn:ietf:params:oauth:token-type:refresh_token",
-                "scope": "offline_access",
-            },
-            timeout=10.0,
-        )
+        try:
+            resp = httpx.post(
+                self._token_url(),
+                data={
+                    "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
+                    "client_id": settings.KEYCLOAK_API_KEY_CLIENT_ID,
+                    "client_secret": settings.KEYCLOAK_API_KEY_CLIENT_SECRET,
+                    "subject_token": user_access_token,
+                    "subject_token_type": "urn:ietf:params:oauth:token-type:access_token",
+                    "requested_token_type": "urn:ietf:params:oauth:token-type:refresh_token",
+                    "scope": "offline_access",
+                },
+                timeout=10.0,
+            )
+        except httpx.HTTPError as exc:
+            _log.warning("Keycloak token exchange request failed: %s", exc)
+            raise KeycloakError(f"Keycloak unreachable: {exc}") from exc
         if resp.status_code != 200:
             _log.warning("Keycloak token exchange failed status=%s", resp.status_code)
             raise KeycloakError(f"Keycloak token exchange failed: {resp.status_code}")
@@ -62,15 +66,19 @@ class KeycloakClient:
         return offline_token, session_id
 
     def _get_admin_token(self) -> str:
-        resp = httpx.post(
-            self._token_url(),
-            data={
-                "grant_type": "client_credentials",
-                "client_id": settings.KEYCLOAK_ADMIN_CLIENT_ID,
-                "client_secret": settings.KEYCLOAK_ADMIN_CLIENT_SECRET,
-            },
-            timeout=10.0,
-        )
+        try:
+            resp = httpx.post(
+                self._token_url(),
+                data={
+                    "grant_type": "client_credentials",
+                    "client_id": settings.KEYCLOAK_ADMIN_CLIENT_ID,
+                    "client_secret": settings.KEYCLOAK_ADMIN_CLIENT_SECRET,
+                },
+                timeout=10.0,
+            )
+        except httpx.HTTPError as exc:
+            _log.warning("Keycloak admin token request failed: %s", exc)
+            raise KeycloakError(f"Keycloak unreachable: {exc}") from exc
         if resp.status_code != 200:
             _log.warning("Keycloak admin token request failed status=%s", resp.status_code)
             raise KeycloakError(f"Keycloak admin token request failed: {resp.status_code}")
@@ -79,11 +87,15 @@ class KeycloakClient:
     def revoke_session(self, session_id: str) -> None:
         """Revoke a Keycloak session by its session ID."""
         admin_token = self._get_admin_token()
-        resp = httpx.delete(
-            f"{self._admin_base()}/sessions/{session_id}",
-            headers={"Authorization": f"Bearer {admin_token}"},
-            timeout=10.0,
-        )
+        try:
+            resp = httpx.delete(
+                f"{self._admin_base()}/sessions/{session_id}",
+                headers={"Authorization": f"Bearer {admin_token}"},
+                timeout=10.0,
+            )
+        except httpx.HTTPError as exc:
+            _log.warning("Keycloak session revocation request failed: %s", exc)
+            raise KeycloakError(f"Keycloak unreachable: {exc}") from exc
         # 204 = revoked, 404 = already gone — both are acceptable
         if resp.status_code not in (204, 404):
             _log.warning("Keycloak session revocation failed status=%s", resp.status_code)
@@ -95,11 +107,15 @@ class KeycloakClient:
         ``user_external_id`` is the Keycloak user UUID (the ``sub`` claim).
         """
         admin_token = self._get_admin_token()
-        resp = httpx.delete(
-            f"{self._admin_base()}/users/{user_external_id}/sessions",
-            headers={"Authorization": f"Bearer {admin_token}"},
-            timeout=10.0,
-        )
+        try:
+            resp = httpx.delete(
+                f"{self._admin_base()}/users/{user_external_id}/sessions",
+                headers={"Authorization": f"Bearer {admin_token}"},
+                timeout=10.0,
+            )
+        except httpx.HTTPError as exc:
+            _log.warning("Keycloak logout-all-sessions request failed user=%s: %s", user_external_id, exc)
+            raise KeycloakError(f"Keycloak unreachable: {exc}") from exc
         # 204 = all sessions terminated, 404 = user not found (treat as no-op)
         if resp.status_code not in (204, 404):
             _log.warning(
