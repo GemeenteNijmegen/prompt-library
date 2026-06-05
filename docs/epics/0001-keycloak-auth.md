@@ -145,7 +145,7 @@ Then expand outward: remaining endpoints, scope catalogue, API-key endpoints, ra
 - `scripts/generate_key.py` is gone; `scripts/dev_token.py` exists and refuses to run in production.
 - `src/config.py` refuses to start when `ENVIRONMENT=production` without `JWKS_URI` + `JWT_ISSUER` or with `JWT_SECRET_KEY` set.
 - Tests pass against the new validation path with HS256 fixtures populating the full claim set.
-- End-to-end smoke test against a real Keycloak v26+ instance (in CI or staging) demonstrates: federated login from a test Entra tenant, `org_id` claim emitted, row-level visibility working, `prompt:publish:public` blocked for non-Gallery-Operator users, `prompt_events` rows written.
+- End-to-end smoke suite (`pytest -m smoke`) against a local Keycloak v26 stack demonstrates: `org_id` claim emitted and enforced by row-level visibility, `prompt:publish:public` blocked for non-Gallery-Operator clients, `prompt_events` rows written and attributed to the correct `azp`/API-key. **Federated Entra login is descoped from automated CI** — it requires a live Entra tenant and is verified manually via the operator runbook (see `keycloak/README.md`).
 - ADR 0003, ADR 0004, CONTEXT.md, PLAN.md, ARCHITECTURE.md, README.md, `.env.example` all consistent with the implemented state (any drift discovered during implementation reflected back into the docs in the same PR).
 
 ## References
