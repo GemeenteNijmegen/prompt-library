@@ -1,0 +1,14 @@
+vars {
+  base_url: http://localhost:8000
+  keycloak_url: http://localhost:8080
+  keycloak_realm: gallery
+  keycloak_client_id: gallery-test-client
+  keycloak_client_secret: test-client-secret
+  keycloak_username: devuser
+  keycloak_password: dev
+}
+vars:secret [
+  token,
+  keycloak_client_secret,
+  keycloak_password
+]
