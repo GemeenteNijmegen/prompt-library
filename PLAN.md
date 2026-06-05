@@ -42,20 +42,20 @@
 | #   | Area               | Decision                                                                             | Rationale                                         |
 | --- | ------------------ | ------------------------------------------------------------------------------------ | ------------------------------------------------- |
 | 1a  | IdP                | **Keycloak v26+** (see ADR 0003). One realm; each Organisation modelled as a Keycloak Organization federated to its Entra tenant via OIDC identity brokering. | Mature DCR, first-class scope↔role mapping, multi-tenant via Organizations |
-| 1b  | Token mechanism    | Keycloak-issued JWTs for all consumers. Short-lived access (15 min) + interactive refresh (30 d / 7 d idle, rotate-on-use) for MCP clients; offline tokens (365 d) for API-key fallback. | One issuer, one validation path; per-client TTL configured in Keycloak |
+| 1b  | Token mechanism    | Keycloak-issued JWTs for OAuth consumers (short-lived access 15 min + interactive refresh 30 d / 7 d idle, rotate-on-use). API-key fallback uses **opaque gallery-issued keys** (`pg_…`, SHA-256 hash stored), not Keycloak tokens — STE V2 cannot mint offline tokens (see ADR 0004 rev 2). One authorization path: both JWT and opaque key resolve to one `AuthenticatedUser`. Gallery signs no JWTs. | Durable (Keycloak-version-independent), fully testable; one authorization path, two credential front doors |
 | 1c  | Roles              | OAuth scopes in JWT `scope` claim, mapped 1:1 from Keycloak realm/client roles via role scope mappers. No local gallery roles. | Standards-shaped tokens; gallery code reads `scope` per OAuth spec |
 | 1m  | Existing data      | Fresh start, no migration script                                                     | Extract is for a new service, not a data move     |
-| 1n  | Access model       | Organisation-deployed OAuth clients primary (manually registered in Keycloak by Gallery Operator at org onboarding, one per deployment, confidential client + PKCE). API keys via Keycloak offline tokens as fallback. DCR + personal-LLM-account flow deferred to v2. See ADR 0004. | Setup boundary is the Organisation, not the End User; bounded manual cadence at current scale |
+| 1n  | Access model       | Organisation-deployed OAuth clients primary (manually registered in Keycloak by Gallery Operator at org onboarding, one per deployment, confidential client + PKCE). This is the per-user path: an admin installs one client/MCP server, each End User authenticates as themselves via Keycloak. Opaque gallery API keys are the fallback for headless/individual use. DCR + personal-LLM-account flow deferred to v2. See ADR 0004. | Setup boundary is the Organisation, not the End User; bounded manual cadence at current scale |
 | 1o  | Org discovery      | Email-domain mapping to Keycloak Organization (Entra federation per org). No picker fallback in v1. | Lowest-friction routing; Entra B2B guest UPN mismatch is a documented v1 limitation |
 | 1p  | Org provisioning   | Manual Gallery-Operator task per new Organisation (Keycloak org + Entra IdP config + first Organisation Admin). | Low cadence; self-serve customer onboarding is v2 |
 | 1q  | Admin model        | Delegated admin via Keycloak Organizations: Organisation Admins self-serve user/scope management for own org in Keycloak admin console. Gallery Operators only handle cross-cutting changes. | Scales past a handful of orgs without exporting Gallery Ops queue as a bottleneck |
 | 10a | Token delivery     | `Authorization: Bearer <jwt>` — header only                                          | Single pattern, no cookie complexity              |
 | 10b | Profile upsert     | Auto-upsert `users` table on every auth'd request                                    | Guarantees freshness, negligible overhead         |
 | 10c | JWT structure      | `iss`, `sub`, `aud`, `azp`, `iat`, `exp`, `scope`, `org_id`, `name`, `email`, `avatar_url`. `aud` MUST contain `"prompt-gallery-api"` (strict check); `azp` is logged per request. | Standards-shaped (RFC 9068); `org_id` powers row-level visibility; `azp` enables per-integration audit |
-| 11a | API keys           | Keycloak offline tokens, requested by the gallery on behalf of the End User. Gallery does **not** sign tokens. | Single issuer; revocable in Keycloak admin or via gallery UI |
+| 11a | API keys           | Opaque gallery-issued secrets (`pg_<random>`). Only a SHA-256 hash is stored; the raw key is shown once. Gallery does **not** sign tokens and does not mint Keycloak tokens. | Durable, version-independent of Keycloak; recognisable paste-a-key UX for MCP/chat clients; revocable by DB update |
 | 11b | Header             | `Authorization: Bearer` (same as user)                                               | Single header convention                          |
-| 11c | Key management     | `POST /api/v1/integrations/api-keys` proxies to Keycloak offline-token issuance for the calling End User; user can list/revoke via gallery UI. Legacy `/api/v1/auth/generate-key` HS256 signer is removed. Dev-mode HMAC fallback retained for tests only. | Gallery owns no signing key in production; one trust root |
-| 11d | Revocation         | TTL-bound access tokens + refresh-token replay detection (OAuth 2.1 BCP) + Keycloak admin/UI revocation of offline tokens. Entra deprovisioning is best-effort within ≤7 days for v1 (SCIM in v2). | Bounded exposure window; documented v1 posture |
+| 11c | Key management     | `POST /api/v1/me/api-keys` generates an opaque key for the calling End User (scopes snapshot the issuer's scopes at creation; 365 d TTL); user can list/revoke via gallery UI. An API key cannot itself mint further keys. Legacy `/api/v1/auth/generate-key` HS256 signer is removed; dev-mode HMAC fallback retained for tests only. | Gallery owns no JWT signing key in production; least-privilege; no self-replication |
+| 11d | Revocation         | API keys: immediate DB-update revocation (single key or all via logout-everywhere); 365 d absolute TTL. Interactive OAuth: TTL-bound access tokens + refresh-token replay detection (OAuth 2.1 BCP) + Keycloak SSO-session termination. Entra deprovisioning best-effort ≤7 days for v1 (SCIM in v2). | Bounded exposure window; documented v1 posture |
 | 11e | DCR                | Disabled in v1. Re-enable with strict client policies + per-Organisation opt-in when personal-LLM-account integration becomes a real demand. See ADR 0004 upgrade path. | Org-deployed clients cover the v1 consumer mix; DCR adds attack surface without paying off until personal-LLM is a real case |
 | 5d  | JWT verification   | JWKS endpoint (prod, Keycloak) + shared secret HMAC (dev/test fallback, hard-blocked in production). Gallery enforces `iss`, `aud`, `exp`, signature. | Standard OIDC flow; HMAC fallback survives only as a test-environment convenience |
 | 14  | Rate limiting      | Multi-axis: anonymous 30/min per IP, End User 120/min per `sub`, OAuth client 600/min per `azp`, Organisation 1200/min per `org_id`. Request rejected if any bucket exceeded. Starting values; tune from production traffic. | Per-`azp` catches buggy single-deployment polling; per-`org_id` prevents one Organisation monopolising the gallery |
@@ -113,14 +113,14 @@
 | `prompt:rate`            | Submit or view own ratings                                    |
 | `prompt:image`           | Upload/manage prompt images                                   |
 | `prompt:moderate`        | Cross-Organisation moderation. **Gallery Operators only** — restricted from DCR-registered clients. |
-| `apikey:create`          | Issue API keys (Keycloak offline tokens) for own End User identity via `POST /api/v1/me/api-keys`. **Not granted by default** — typically held by Organisation Admins and a small set of developers per Organisation. Regular End Users do not have this scope. |
+| `apikey:create`          | Issue opaque API keys for own End User identity via `POST /api/v1/me/api-keys`. **Not granted by default** — typically held by Organisation Admins and a small set of developers per Organisation. Regular End Users do not have this scope. (A request authenticated *with* an API key cannot mint further keys, even if the key's snapshot includes this scope.) |
 | `admin:manage_taxonomy`  | CRUD on categories and tags                                   |
 | `admin:manage_users`     | View user profiles (admin console)                            |
 | `admin:read_audit`       | Read the `prompt_events` audit log. Reserved in v1 (no read API yet); query the DB directly. |
 
-> **Note:** `admin:manage_keys` is removed — the gallery no longer signs machine JWTs. Offline-token (API key) issuance is gated by ownership (End Users issue their own) and Keycloak admin (Organisation Admins / Gallery Operators can revoke). See ADR 0004.
+> **Note:** `admin:manage_keys` is removed — the gallery no longer signs machine JWTs. API-key issuance is gated by ownership (End Users issue their own opaque keys) and revocation is a gallery DB update (via the UI or logout-everywhere). See ADR 0004.
 >
-> **DCR-restricted scopes.** `admin:*`, `prompt:publish:public`, and `prompt:moderate` are configured in Keycloak client policies so DCR-registered clients cannot request them. First-party clients (the SPA and the API-key client) can. A compromised LLM integration cannot escalate to admin or to cross-Organisation actions.
+> **DCR-restricted scopes.** `admin:*`, `prompt:publish:public`, and `prompt:moderate` are configured in Keycloak client policies so DCR-registered clients cannot request them. First-party clients (the SPA) can. A compromised LLM integration cannot escalate to admin or to cross-Organisation actions. An API key only ever carries the scopes its issuing user held at creation time.
 
 **Typical role compositions (for IdP reference):**
 
@@ -194,15 +194,15 @@ order                   — asc, desc (default: desc)
 | Method   | Path                          | Auth              | Description                                                                              |
 | -------- | ----------------------------- | ----------------- | ---------------------------------------------------------------------------------------- |
 | `GET`    | `/api/v1/me`                  | Bearer (user JWT) | Current End User profile (read-only, from JWT claims)                                    |
-| `POST`   | `/api/v1/me/api-keys`         | `apikey:create`   | Issue a new API key for the calling End User (proxy to Keycloak offline-token issuance). Returns the token exactly once; subsequent reads only return metadata. |
-| `GET`    | `/api/v1/me/api-keys`         | Bearer (user JWT) | List the calling End User's active API keys (id, label, created_at, last_used_at — never the token itself) |
+| `POST`   | `/api/v1/me/api-keys`         | `apikey:create`   | Issue a new opaque API key (`pg_…`) for the calling End User; scopes snapshot the issuer's scopes, 365 d TTL. Returns the raw key exactly once; subsequent reads only return metadata. Not callable using an API key. |
+| `GET`    | `/api/v1/me/api-keys`         | Bearer            | List the calling End User's active API keys (id, label, token_prefix, scopes, created_at, expires_at, last_used_at — never the raw key) |
 | `DELETE` | `/api/v1/me/api-keys/{id}`    | Bearer (user JWT) | Revoke a specific API key owned by the calling End User                                  |
 
 > The legacy `/api/v1/auth/generate-key` HS256-signing endpoint is removed. The gallery no longer signs tokens in production; all tokens are Keycloak-issued. The dev-mode HMAC fallback in `src/utils/jwt_utils.py` is retained for tests and local development without Keycloak running, but is hard-blocked when `ENVIRONMENT=production`.
 >
 > Organisation-deployed OAuth clients (Copilot Enterprise, custom internal chat clients) do **not** surface in the gallery API in v1. They are managed in Keycloak admin by the Gallery Operator (see ADR 0004 §"Organisation onboarding").
 >
-> **Service-identity API keys** (keys for headless users — CI pipelines, automation, OpenWebUI service accounts) are provisioned by Organisation Admins directly in Keycloak admin: create a local Keycloak user inside the Organisation, grant the scopes that user should have, issue an offline token. The gallery `/me/api-keys` endpoints cover "I want a key for *my* End User identity"; the headless-identity case bypasses the gallery API and lives entirely in Keycloak.
+> **Service-identity API keys** (keys for headless users — CI pipelines, automation, OpenWebUI service accounts) are provisioned by Organisation Admins creating a local (non-Entra-federated) Keycloak user inside the Organisation, granting it the appropriate scopes, then logging in as that user and issuing an opaque key via `POST /me/api-keys`. The headless user persists independently of any human admin's lifecycle. The gallery `/me/api-keys` endpoints cover "a key for *this* End User identity" for both human and service users.
 
 #### Infrastructure
 
@@ -593,9 +593,9 @@ Files in the learning platform that reference prompts and need to be updated aft
 Builds the Keycloak-facing auth surface per ADR 0003 / ADR 0004.
 
 - `jwt_utils.py`: JWKS fetcher (1h cache + on-kid-miss force-refetch + serve-stale-if-IdP-down), `decode_and_verify` with strict `iss`/`aud`/`exp` checks + 60s leeway, RS256 (prod) / HS256 (dev/test) algorithm whitelist, hard-block HMAC fallback when `ENVIRONMENT=production`
-- `middleware/auth.py`: replace Phase 2 stub; populate `AuthenticatedUser(sub, org_id, scope, azp, ...)`; auto-upsert `users` row (including `org_id`); log `azp` on the request boundary
-- `routers/me.py`: `GET /me` (profile from JWT claims); `POST/GET/DELETE /me/api-keys` (proxy to Keycloak offline-token issuance / list / revoke; `apikey:create` scope on POST)
-- `POST /api/v1/me/logout-everywhere`: panic-button endpoint — kills calling user's Keycloak SSO sessions + revokes all their refresh chains + revokes all their API keys
+- `middleware/auth.py`: replace Phase 2 stub; dispatch bearer by prefix — opaque `pg_…` key (SHA-256 DB lookup) or Keycloak JWT — both to one `AuthenticatedUser(sub, org_id, scope, azp, ...)`; auto-upsert `users` row on the JWT path; log `azp` on the request boundary (API-key requests log `azp=apikey:<id>`)
+- `routers/me.py`: `GET /me` (profile from claims); `POST/GET/DELETE /me/api-keys` (generate opaque key / list / revoke; `apikey:create` scope on POST; key-mints-key blocked)
+- `POST /api/v1/me/logout-everywhere`: panic-button endpoint — kills calling user's Keycloak SSO sessions + revokes all their API keys in the DB
 - Multi-axis rate limiting (per-IP / per-`sub` / per-`azp` / per-`org_id`) in `middleware/rate_limit.py`
 - `prompt_events` audit table + write hooks on state-changing endpoints (no read API in v1)
 - Row-level visibility helper applied uniformly on read endpoints

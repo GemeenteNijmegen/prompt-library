@@ -411,6 +411,14 @@
 
   "users": [
     {
+      "username": "service-account-gallery-test-client",
+      "enabled": true,
+      "serviceAccountClientId": "gallery-test-client",
+      "clientRoles": {
+        "realm-management": ["manage-users", "view-users"]
+      }
+    },
+    {
       "username": "devuser",
       "email": "dev@example.com",
       "firstName": "Dev",

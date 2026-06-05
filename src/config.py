@@ -45,14 +45,12 @@ class Settings(BaseSettings):
     RATE_LIMIT_CLIENT: int = 600
     RATE_LIMIT_ORG: int = 1200
 
-    # Keycloak API-key issuance (ADR 0004 §API-key issuance).
-    # The API-key client uses token exchange to issue offline tokens on behalf
-    # of the calling End User.  The admin client revokes sessions via the
-    # Keycloak admin REST API.
+    # Keycloak admin access (ADR 0004 §"Logout-everywhere").
+    # API keys are opaque, gallery-issued secrets — Keycloak is not involved in
+    # issuing or validating them. The admin client is used only to terminate a
+    # user's interactive SSO sessions for the logout-everywhere panic button.
     KEYCLOAK_URL: str = ""
     KEYCLOAK_REALM: str = "prompt-gallery"
-    KEYCLOAK_API_KEY_CLIENT_ID: str = ""
-    KEYCLOAK_API_KEY_CLIENT_SECRET: str = ""
     KEYCLOAK_ADMIN_CLIENT_ID: str = ""
     KEYCLOAK_ADMIN_CLIENT_SECRET: str = ""
 
