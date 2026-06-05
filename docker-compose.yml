@@ -96,9 +96,16 @@ services:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
       # KC_DB=dev-mem is the image default for start-dev; no need to set it here.
-      # start-dev uses the request URL as issuer — tokens from localhost:8080 carry
-      # iss=http://localhost:8080/realms/gallery.  The gallery app fetches JWKS from
-      # http://keycloak:8080 (compose-internal); JWT_ISSUER must be the external URL.
+      # Pin the canonical hostname so tokens always carry
+      # iss=http://localhost:8080/realms/gallery regardless of whether Keycloak is
+      # reached via the Docker-internal name (keycloak:8080) or the host-side name
+      # (localhost:8080).  Without this, start-dev derives the issuer from the
+      # request URL, so a token fetched externally (iss=localhost:8080) fails the
+      # gallery's strict iss check when JWKS is fetched via keycloak:8080.
+      KC_HOSTNAME: http://localhost:8080
+      # start-dev keeps hostname-strict off, so backchannel access (the kcadm
+      # bootstrap below via 127.0.0.1, the app's JWKS fetch via keycloak:8080)
+      # still works — only the issuer/frontend URL is pinned to localhost:8080.
     ports:
       - "8080:8080"
     volumes:
@@ -126,6 +133,16 @@ services:
       ENVIRONMENT: development
       LOG_LEVEL: debug
       EMBEDDING_USE_FAKE: "true"
+      # Keycloak integration — values mirror keycloak/realm-export.json.
+      # KEYCLOAK_URL uses the compose-internal hostname; JWT_ISSUER uses the
+      # external URL that Keycloak embeds in tokens (iss claim).
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: gallery
+      # Admin client used only for logout-everywhere (terminating interactive
+      # SSO sessions). API keys are opaque gallery secrets — no Keycloak client
+      # is involved in issuing them.
+      KEYCLOAK_ADMIN_CLIENT_ID: gallery-test-client
+      KEYCLOAK_ADMIN_CLIENT_SECRET: test-client-secret
     volumes:
       - ./src:/app/src
       - ./migrations:/app/migrations

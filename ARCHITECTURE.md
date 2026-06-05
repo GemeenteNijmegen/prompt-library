@@ -8,22 +8,23 @@ Prompt Gallery is a standalone FastAPI service. It is consumed by a first-party 
 ┌────────────────────────────┐
 │  Keycloak (v26+)            │  ← IdP (ADR 0003)
 │  one realm, Organizations    │     Federates per-Organisation to Entra
-│  + JWKS + offline tokens     │     Issues all tokens
+│  + JWKS, issues OAuth tokens │     (gallery validates via JWKS)
 └──┬────────────────┬──────────┘
-   │ JWT bearer     │ JWT bearer
-   ▼                ▼
-┌──────────────┐  ┌─────────────────────┐
-│ Gallery SPA  │  │ Org-deployed chat   │
-│ (first-party)│  │ clients + API-key   │
-│              │  │ clients (ADR 0004)  │
-└──────┬───────┘  └──────────┬──────────┘
-       │ HTTP /api/v1/...    │
-       ▼                     ▼
-┌──────────────────────────────────────┐
-│  Prompt Gallery API                   │
-│  FastAPI + Pydantic                   │
-│  SQLite / PostgreSQL                  │
-└──────────────────────────────────────┘
+   │ JWT bearer     │ JWT bearer        opaque pg_… key
+   ▼                ▼                   ▼
+┌──────────────┐  ┌─────────────────────┐  ┌──────────────────┐
+│ Gallery SPA  │  │ Org-deployed chat   │  │ API-key clients  │
+│ (first-party)│  │ clients (ADR 0004)  │  │ (CI, scripts,    │
+│              │  │ acting per-user     │  │  MCP/headless)   │
+└──────┬───────┘  └──────────┬──────────┘  └────────┬─────────┘
+       │ HTTP /api/v1/...    │                       │
+       ▼                     ▼                       ▼
+┌─────────────────────────────────────────────────────────────┐
+│  Prompt Gallery API                                          │
+│  FastAPI + Pydantic — one authorization path:               │
+│  JWT (JWKS-validated) │ opaque key (DB hash lookup)          │
+│  SQLite / PostgreSQL                                         │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ## Layer structure
@@ -100,12 +101,12 @@ scripts/
 
 | # | Decision | Rationale |
 |---|---|---|
-| Auth | Keycloak-issued JWTs (RS256 via JWKS) + HMAC dev/test fallback (HS256, blocked in production). Strict `iss` + `aud` + `exp` checks; 60s clock leeway | ADR 0003/0004; one validation path, two key sources |
+| Auth | Two front doors, one authorization path: Keycloak-issued JWTs (RS256 via JWKS) + HMAC dev/test fallback (HS256, blocked in production; strict `iss`/`aud`/`exp`, 60s leeway), and opaque gallery API keys (`pg_…`, SHA-256 DB-hash lookup). Both resolve to one `AuthenticatedUser` | ADR 0003/0004 |
 | Storage | `StorageBackend` Protocol; `LocalFileSystemBackend` default, `S3Backend` optional | Swap backend via `STORAGE_BACKEND` env var without touching router code |
 | Caching | `cachetools.TTLCache` (in-memory, 60 s) for featured/categories/tags; Redis when `REDIS_URL` set; invalidated on writes | Hot reads cached with zero infra requirement in dev |
 | Rate limiting | `RateLimitMiddleware`: multi-axis per-IP / per-`sub` / per-`azp` / per-`org_id`, per-minute window counter; request rejected if any bucket exceeded | Per-`azp` catches buggy single-deployment polling; per-`org_id` caps cross-Organisation impact |
 | Request tracing | `RequestIDMiddleware` echoes/generates `X-Request-ID`; logs method/path/status/duration + `azp` per request | Every response traceable to the OAuth client that made it |
-| Token issuance | All tokens issued by Keycloak. Personal API keys via `POST /api/v1/me/api-keys` (apikey:create scope) proxy to Keycloak offline-token issuance; service-identity keys provisioned by Org Admins in Keycloak admin | Single trust root; gallery owns no signing key in production |
+| Token issuance | OAuth tokens issued by Keycloak (gallery signs no JWTs in production). Personal API keys via `POST /api/v1/me/api-keys` (apikey:create scope) are opaque gallery-generated secrets — only a SHA-256 hash is stored; service-identity keys likewise. The raw key is shown once | Gallery owns no JWT signing key; keys are version-independent of Keycloak |
 | User upsert | `users` row upserted on every authenticated request from JWT claims (incl. `org_id`) | Profile always fresh; no separate sync job |
 | Permissions | OAuth scopes in JWT `scope` claim, mapped from Keycloak realm/client roles; `has_scope(perm)` check in routers | Standards-shaped tokens; gallery reads `scope` per OAuth spec |
 | Status transitions | `draft→published_org→published_public→archived→draft`; enforced in `_apply_status_transition`. `prompt:publish` for own-Organisation, `prompt:publish:public` for cross-Organisation (Gallery Operators only) | Two-stage publish workflow; cross-org curation gated separately |
@@ -157,12 +158,10 @@ KeycloakClient.logout_all_sessions(external_id)
   → DELETE /admin/realms/{realm}/users/{sub}/sessions   [all interactive sessions]
   ↓
 For each active api_keys row:
-  KeycloakClient.revoke_session(keycloak_session_id)
-  → DELETE /admin/realms/{realm}/sessions/{session_id}  [offline token session]
-  → api_keys.revoked_at = now
+  api_keys.revoked_at = now   [DB-only; opaque keys have no Keycloak session]
   ↓
-Any Keycloak failure?
-  ├── Yes → log failures, return 502 KEYCLOAK_ERROR (partial revocations committed)
+Keycloak session-logout failure?
+  ├── Yes → log failure, return 502 KEYCLOAK_ERROR (keys still revoked in DB)
   └── No  → write audit event (entity=user, action=logout_everywhere), return 204
 ```
 

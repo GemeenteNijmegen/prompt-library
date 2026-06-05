@@ -11,7 +11,7 @@ See also: [CONTEXT.md](../../CONTEXT.md) for actor-model vocabulary and the visi
 - Real JWT validation against Keycloak via JWKS, with strict `iss` / `aud` / `exp` checks, clock-skew tolerance, and resilient JWKS caching.
 - Multi-Organisation support: per-Organisation Entra federation, `org_id` claim threaded through to row-level visibility filtering and audit.
 - OAuth-scope-shaped permissions (scopes ↔ Keycloak realm/client roles) replacing the current flat-claim stub.
-- API-key fallback for non-OAuth clients (CI, scripts) issued by privileged End Users via the gallery and proxied to Keycloak offline-token issuance.
+- API-key fallback for non-OAuth clients (CI, scripts, MCP/headless) issued by privileged End Users via the gallery as opaque gallery-generated secrets (ADR 0004 rev 2; not Keycloak tokens).
 - Audit log of state-changing actions including the OAuth client (`azp`) that made the call.
 - Multi-axis rate limiting (per-IP / `sub` / `azp` / `org_id`).
 - Operator-facing logout-everywhere panic button.
@@ -34,7 +34,7 @@ These are configuration tasks in the Keycloak realm, not gallery code. Required 
 - Define the gallery as a single Keycloak project/client with `gallery-audience` scope (audience mapper emitting `aud=prompt-gallery-api`), `org_id` protocol mapper, role scope mappers for the permission catalogue.
 - Define realm/client roles 1:1 with the scope catalogue in [PLAN.md §Authentication Permissions](../../PLAN.md#authentication-permissions-flat-claims).
 - Curate `consentScreenText` per non-OIDC client scope.
-- Configure token lifetimes per ADR 0004 §"Token lifetimes" (15-min access, 30d/7d-idle interactive refresh with rotate-on-use + replay detection, 365d offline).
+- Configure token lifetimes per ADR 0004 §"Token lifetimes" (15-min access, 30d/7d-idle interactive refresh with rotate-on-use + replay detection). API-key TTL (365 d) is enforced by the gallery, not Keycloak.
 - Restrict `admin:*`, `prompt:publish:public`, `prompt:moderate`, `admin:read_audit` to first-party clients only (not on org-deployed clients' assigned optional scopes).
 - Create the "Gallery Ops" Keycloak Organization with local users for bootstrap/break-glass.
 - Bootstrap the first customer Organisation following the [ADR 0004 §"Organisation onboarding"](../adr/0004-access-model-oauth-clients.md) runbook (Organization + Entra federation + verified domain + first Org Admin + per-deployment confidential OAuth client).
@@ -103,7 +103,7 @@ New Alembic migration covering:
 Create `src/routers/me.py` (and remove `src/routers/auth.py` along with `/auth/generate-key`):
 
 - `GET /api/v1/me` — current End User profile (read-only, from JWT).
-- `POST /api/v1/me/api-keys` — gated by `apikey:create`; proxies to Keycloak offline-token issuance for the calling End User; returns the token exactly once + persists a metadata row (id, label, created_at, last_used_at, Keycloak session id).
+- `POST /api/v1/me/api-keys` — gated by `apikey:create`; generates an opaque key for the calling End User; returns the raw key exactly once + persists a metadata row (id, label, token_hash, token_prefix, scopes snapshot, created_at, expires_at, last_used_at).
 - `GET /api/v1/me/api-keys` — list own keys' metadata.
 - `DELETE /api/v1/me/api-keys/{id}` — revoke via Keycloak session/token revocation.
 - `POST /api/v1/me/logout-everywhere` — panic button: Keycloak `users/{user-id}/logout` admin call + revoke all own API keys. Confirmation handled SPA-side.
@@ -123,8 +123,8 @@ Create `src/routers/me.py` (and remove `src/routers/auth.py` along with `/auth/g
 - Add tests for the new status transitions including the `prompt:publish:public` gate.
 - Add tests for the multi-axis rate-limit buckets, especially per-`azp` and per-`org_id`.
 - Add tests for audit-event writing on each state-changing endpoint.
-- Add tests for `/me/api-keys` (issuance / list / revoke) — mock the Keycloak admin API calls.
-- Add tests for `/me/logout-everywhere` — mock Keycloak admin calls.
+- Add tests for `/me/api-keys` (issuance / list / revoke) — pure DB, no Keycloak. Include a non-mocked authentication path (issue a key, present it, assert it authenticates; revoked/expired keys rejected) so a mechanism regression can't hide behind a mocked Keycloak boundary.
+- Add tests for `/me/logout-everywhere` — keys revoked in DB; mock only the Keycloak interactive-session logout.
 
 ### 11. Documentation polish
 
