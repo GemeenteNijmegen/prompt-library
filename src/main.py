@@ -8,7 +8,7 @@ from src.config import settings
 from src.database import init_db
 from src.middleware.rate_limit import RateLimitMiddleware
 from src.middleware.request_id import RequestIDMiddleware
-from src.routers import health, categories, tags, prompts, me, uploads
+from src.routers import health, categories, tags, prompts, me, uploads, admin
 
 logging.basicConfig(
     level=settings.LOG_LEVEL.upper(),
@@ -65,6 +65,7 @@ def create_app(
     app.include_router(prompts.router, prefix=prefix)
     app.include_router(me.router, prefix=prefix)
     app.include_router(uploads.router, prefix=prefix)
+    app.include_router(admin.router, prefix=prefix)
 
     return app
 
