@@ -39,11 +39,11 @@ def upgrade() -> None:
     op.execute("UPDATE prompts SET status = 'published_org' WHERE status = 'published'")
 
     # 3. Add CHECK constraint to prompts.status.
-    op.create_check_constraint(
-        'ck_prompts_status',
-        'prompts',
-        "status IN ('draft', 'published_org', 'published_public', 'archived')",
-    )
+    with op.batch_alter_table('prompts') as batch_op:
+        batch_op.create_check_constraint(
+            'ck_prompts_status',
+            "status IN ('draft', 'published_org', 'published_public', 'archived')",
+        )
 
     # 4. Create prompt_events with the four indexes from PLAN.md §Data Model.
     #    entity_id is TEXT (not INT) to accommodate non-integer IDs such as
@@ -96,7 +96,8 @@ def downgrade() -> None:
     op.drop_index('idx_prompt_events_actor_user', table_name='prompt_events')
     op.drop_table('prompt_events')
 
-    op.drop_constraint('ck_prompts_status', 'prompts', type_='check')
+    with op.batch_alter_table('prompts') as batch_op:
+        batch_op.drop_constraint('ck_prompts_status', type_='check')
 
     # Revert status values: published_org and published_public both collapse
     # back to 'published' (the only published state in the previous schema).
