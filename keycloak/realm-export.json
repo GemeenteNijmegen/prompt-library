@@ -248,56 +248,6 @@
     },
 
     {
-      "clientId": "gallery-apikey-issuer",
-      "enabled": true,
-      "publicClient": false,
-      "secret": "apikey-issuer-secret",
-      "directAccessGrantsEnabled": true,
-      "standardFlowEnabled": false,
-      "implicitFlowEnabled": false,
-      "serviceAccountsEnabled": true,
-      "defaultClientScopes": ["openid", "profile", "email"],
-      "optionalClientScopes": [
-        "prompt:read",
-        "prompt:read:restricted",
-        "prompt:create",
-        "prompt:write",
-        "prompt:publish",
-        "prompt:publish:public",
-        "prompt:rate",
-        "prompt:image",
-        "prompt:moderate",
-        "apikey:create",
-        "admin:manage_taxonomy",
-        "admin:manage_users",
-        "admin:read_audit"
-      ],
-      "protocolMappers": [
-        {
-          "name": "gallery-audience",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-audience-mapper",
-          "consentRequired": false,
-          "config": {
-            "included.custom.audience": "prompt-gallery-api",
-            "access.token.claim": "true",
-            "id.token.claim": "false"
-          }
-        },
-        {
-          "name": "sub",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-sub-mapper",
-          "consentRequired": false,
-          "config": {
-            "access.token.claim": "true",
-            "id.token.claim": "true"
-          }
-        }
-      ]
-    },
-
-    {
       "clientId": "gallery-test-client",
       "enabled": true,
       "publicClient": false,
