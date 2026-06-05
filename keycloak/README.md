@@ -28,12 +28,15 @@ curl -H "Authorization: Bearer $(python scripts/keycloak_token.py)" \
 
 Seeded users (password `dev` for all):
 
-| Username | Org | Persona |
-|---|---|---|
-| `devuser` | gallery-ops | admin |
-| `alice` | org-a | contributor |
-| `bob` | org-b | contributor |
-| `carol` | org-b | contributor |
+| Username | Org | Persona | Effective permission scopes |
+|---|---|---|---|
+| `devuser` | gallery-ops | admin | all 13 |
+| `dave` | gallery-ops | admin | all 13 |
+| `alice` | org-a | contributor | prompt:read + apikey:create + prompt:read:restricted + prompt:create + prompt:write + prompt:rate + prompt:image |
+| `bob` | org-b | viewer | prompt:read + apikey:create |
+| `carol` | org-b | publisher | all contributor scopes + prompt:publish |
+
+> **Roles in the admin console**: seeded users are assigned the granular permission realm roles directly (e.g. `prompt:create`, `prompt:read`) rather than the composite persona roles (`contributor`, `publisher`). This is what produces role-filtered `scope` claims via the `permission-scopes-from-roles` protocol mapper on `gallery-test-client`. The composite roles exist in the realm for operator use but are not assigned to seeded users.
 
 ---
 
