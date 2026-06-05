@@ -25,94 +25,291 @@
     {
       "name": "prompt:read",
       "protocol": "openid-connect",
-      "attributes": { "include.in.token.scope": "true" }
+      "attributes": { "include.in.token.scope": "false" },
+      "protocolMappers": [
+        {
+          "name": "prompt-read-role-scope",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-role-scope-mapper",
+          "consentRequired": false,
+          "config": {
+            "role": "prompt:read",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
     },
     {
       "name": "prompt:read:restricted",
       "protocol": "openid-connect",
-      "attributes": { "include.in.token.scope": "true" }
+      "attributes": { "include.in.token.scope": "false" },
+      "protocolMappers": [
+        {
+          "name": "prompt-read-restricted-role-scope",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-role-scope-mapper",
+          "consentRequired": false,
+          "config": {
+            "role": "prompt:read:restricted",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
     },
     {
       "name": "prompt:create",
       "protocol": "openid-connect",
-      "attributes": { "include.in.token.scope": "true" }
+      "attributes": { "include.in.token.scope": "false" },
+      "protocolMappers": [
+        {
+          "name": "prompt-create-role-scope",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-role-scope-mapper",
+          "consentRequired": false,
+          "config": {
+            "role": "prompt:create",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
     },
     {
       "name": "prompt:write",
       "protocol": "openid-connect",
-      "attributes": { "include.in.token.scope": "true" }
+      "attributes": { "include.in.token.scope": "false" },
+      "protocolMappers": [
+        {
+          "name": "prompt-write-role-scope",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-role-scope-mapper",
+          "consentRequired": false,
+          "config": {
+            "role": "prompt:write",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
     },
     {
       "name": "prompt:publish",
       "protocol": "openid-connect",
-      "attributes": { "include.in.token.scope": "true" }
+      "attributes": { "include.in.token.scope": "false" },
+      "protocolMappers": [
+        {
+          "name": "prompt-publish-role-scope",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-role-scope-mapper",
+          "consentRequired": false,
+          "config": {
+            "role": "prompt:publish",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
     },
     {
       "name": "prompt:publish:public",
       "protocol": "openid-connect",
-      "attributes": { "include.in.token.scope": "true" }
+      "attributes": { "include.in.token.scope": "false" },
+      "protocolMappers": [
+        {
+          "name": "prompt-publish-public-role-scope",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-role-scope-mapper",
+          "consentRequired": false,
+          "config": {
+            "role": "prompt:publish:public",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
     },
     {
       "name": "prompt:rate",
       "protocol": "openid-connect",
-      "attributes": { "include.in.token.scope": "true" }
+      "attributes": { "include.in.token.scope": "false" },
+      "protocolMappers": [
+        {
+          "name": "prompt-rate-role-scope",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-role-scope-mapper",
+          "consentRequired": false,
+          "config": {
+            "role": "prompt:rate",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
     },
     {
       "name": "prompt:image",
       "protocol": "openid-connect",
-      "attributes": { "include.in.token.scope": "true" }
+      "attributes": { "include.in.token.scope": "false" },
+      "protocolMappers": [
+        {
+          "name": "prompt-image-role-scope",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-role-scope-mapper",
+          "consentRequired": false,
+          "config": {
+            "role": "prompt:image",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
     },
     {
       "name": "prompt:moderate",
       "protocol": "openid-connect",
-      "attributes": { "include.in.token.scope": "true" }
+      "attributes": { "include.in.token.scope": "false" },
+      "protocolMappers": [
+        {
+          "name": "prompt-moderate-role-scope",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-role-scope-mapper",
+          "consentRequired": false,
+          "config": {
+            "role": "prompt:moderate",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
     },
     {
       "name": "apikey:create",
       "protocol": "openid-connect",
-      "attributes": { "include.in.token.scope": "true" }
+      "attributes": { "include.in.token.scope": "false" },
+      "protocolMappers": [
+        {
+          "name": "apikey-create-role-scope",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-role-scope-mapper",
+          "consentRequired": false,
+          "config": {
+            "role": "apikey:create",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
     },
     {
       "name": "admin:manage_taxonomy",
       "protocol": "openid-connect",
-      "attributes": { "include.in.token.scope": "true" }
+      "attributes": { "include.in.token.scope": "false" },
+      "protocolMappers": [
+        {
+          "name": "admin-manage-taxonomy-role-scope",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-role-scope-mapper",
+          "consentRequired": false,
+          "config": {
+            "role": "admin:manage_taxonomy",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
     },
     {
       "name": "admin:manage_users",
       "protocol": "openid-connect",
-      "attributes": { "include.in.token.scope": "true" }
+      "attributes": { "include.in.token.scope": "false" },
+      "protocolMappers": [
+        {
+          "name": "admin-manage-users-role-scope",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-role-scope-mapper",
+          "consentRequired": false,
+          "config": {
+            "role": "admin:manage_users",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
     },
     {
       "name": "admin:read_audit",
       "protocol": "openid-connect",
-      "attributes": { "include.in.token.scope": "true" }
+      "attributes": { "include.in.token.scope": "false" },
+      "protocolMappers": [
+        {
+          "name": "admin-read-audit-role-scope",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-role-scope-mapper",
+          "consentRequired": false,
+          "config": {
+            "role": "admin:read_audit",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
     }
   ],
 
   "roles": {
     "realm": [
+      { "name": "prompt:read",            "composite": false },
+      { "name": "prompt:read:restricted", "composite": false },
+      { "name": "prompt:create",          "composite": false },
+      { "name": "prompt:write",           "composite": false },
+      { "name": "prompt:publish",         "composite": false },
+      { "name": "prompt:publish:public",  "composite": false },
+      { "name": "prompt:rate",            "composite": false },
+      { "name": "prompt:image",           "composite": false },
+      { "name": "prompt:moderate",        "composite": false },
+      { "name": "apikey:create",          "composite": false },
+      { "name": "admin:manage_taxonomy",  "composite": false },
+      { "name": "admin:manage_users",     "composite": false },
+      { "name": "admin:read_audit",       "composite": false },
+
       {
         "name": "viewer",
-        "description": "Read-only access: prompt:read",
-        "composite": false
+        "description": "Read-only: prompt:read + apikey:create",
+        "composite": true,
+        "composites": { "realm": ["prompt:read", "apikey:create"] }
       },
       {
         "name": "contributor",
-        "description": "viewer + prompt:create prompt:write prompt:rate prompt:image",
+        "description": "viewer + prompt:read:restricted prompt:create prompt:write prompt:rate prompt:image",
         "composite": true,
-        "composites": { "realm": ["viewer"] }
+        "composites": { "realm": ["viewer", "prompt:read:restricted", "prompt:create", "prompt:write", "prompt:rate", "prompt:image"] }
       },
       {
         "name": "publisher",
         "description": "contributor + prompt:publish",
         "composite": true,
-        "composites": { "realm": ["contributor"] }
+        "composites": { "realm": ["contributor", "prompt:publish"] }
       },
       {
         "name": "admin",
         "description": "publisher + prompt:read:restricted prompt:publish:public prompt:moderate admin:*",
         "composite": true,
-        "composites": { "realm": ["publisher"] }
+        "composites": { "realm": ["publisher", "prompt:publish:public", "prompt:moderate", "admin:manage_taxonomy", "admin:manage_users", "admin:read_audit"] }
       }
     ]
   },
