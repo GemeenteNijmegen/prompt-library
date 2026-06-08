@@ -89,7 +89,7 @@ def make_jwt(
         "org_id": org_id,
         "azp": azp,
         "aud": _JWT_AUDIENCE,
-        "scope": scope,
+        "realm_access": {"roles": scope},
         "name": name,
         "email": email,
         "avatar_url": avatar_url,

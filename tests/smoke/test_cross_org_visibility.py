@@ -82,10 +82,13 @@ def test_org_scoped_prompt_hidden_from_other_org(api_url: str, alice_token: str,
 
 @pytest.mark.smoke
 @skip_if_no_stack
-def test_public_prompt_visible_across_orgs(api_url: str, alice_token: str, bob_token: str):
-    """published_public prompt created by alice must be visible to bob (different org)."""
+def test_public_prompt_visible_across_orgs(
+    api_url: str, alice_token: str, bob_token: str, rs256_user_token: str
+):
+    """published_public prompt must be visible to users from any org."""
+    # devuser (rs256_user_token) has prompt:publish:public; alice only has prompt:publish
     prompt = _create_prompt(
-        api_url, alice_token, "published_public", "Smoke: public cross-org prompt"
+        api_url, rs256_user_token, "published_public", "Smoke: public cross-org prompt"
     )
     prompt_id = prompt["id"]
     try:
@@ -95,7 +98,7 @@ def test_public_prompt_visible_across_orgs(api_url: str, alice_token: str, bob_t
             timeout=10.0,
         )
         assert resp_alice.status_code == 200, (
-            f"alice should see her own public prompt, got {resp_alice.status_code}"
+            f"alice should see a published_public prompt, got {resp_alice.status_code}"
         )
 
         resp_bob = httpx.get(
@@ -104,11 +107,11 @@ def test_public_prompt_visible_across_orgs(api_url: str, alice_token: str, bob_t
             timeout=10.0,
         )
         assert resp_bob.status_code == 200, (
-            f"bob (org-b) should see alice's published_public prompt, "
+            f"bob (org-b) should see a published_public prompt, "
             f"got {resp_bob.status_code}: {resp_bob.text}"
         )
     finally:
-        _delete_prompt(api_url, alice_token, prompt_id)
+        _delete_prompt(api_url, rs256_user_token, prompt_id)
 
 
 @pytest.mark.smoke

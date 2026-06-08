@@ -75,10 +75,12 @@ def _upsert_user(db: Session, claims: dict) -> User:
 
 
 def _resolve_scope(claims: dict) -> list[str]:
-    scope = claims.get("scope", [])
-    if isinstance(scope, str):
-        scope = scope.split()
-    return scope
+    """Permissions are carried as Keycloak realm roles (RFC 9068 ``roles``) in
+    ``realm_access.roles``; the granular role names double as permission scopes.
+    Composite role names (e.g. ``publisher``) come along harmlessly and are
+    simply not matched by any ``has_scope`` check."""
+    realm_access = claims.get("realm_access") or {}
+    return list(realm_access.get("roles") or [])
 
 
 def _build_authenticated_user(claims: dict, db: Session) -> "AuthenticatedUser":

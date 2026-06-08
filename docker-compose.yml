@@ -91,6 +91,34 @@ services:
         /opt/keycloak/bin/kcadm.sh update "organizations/$$ORG_A/members/$$ALICE" -r gallery || true
         /opt/keycloak/bin/kcadm.sh update "organizations/$$ORG_B/members/$$BOB"   -r gallery || true
         /opt/keycloak/bin/kcadm.sh update "organizations/$$ORG_B/members/$$CAROL" -r gallery || true
+        # Wait for the gallery realm to finish importing so service accounts exist.
+        # The master-realm kcadm.sh auth succeeds before --import-realm completes,
+        # so gallery-realm SA users might not exist yet without this wait.
+        until /opt/keycloak/bin/kcadm.sh get users -r gallery \
+          -q username=service-account-gallery-test-client 2>/dev/null \
+          | grep -q "service-account-gallery-test-client"; do sleep 2; done
+        # Grant prompt roles to org-deploy-example's service account.
+        # realm-export.json user entries for auto-created SAs may be skipped on
+        # first import; kcadm.sh is the reliable fallback.
+        /opt/keycloak/bin/kcadm.sh add-roles -r gallery \
+          --uusername service-account-org-deploy-example \
+          --rolename prompt:read \
+          --rolename prompt:create \
+          --rolename prompt:write \
+          --rolename prompt:publish \
+          --rolename prompt:rate \
+          --rolename prompt:image \
+          --rolename apikey:create || true
+        # Grant realm-management client roles to gallery-test-client's SA.
+        # Same skip problem for clientRoles in user entries; kcadm.sh is the fix.
+        /opt/keycloak/bin/kcadm.sh add-roles -r gallery \
+          --uusername service-account-gallery-test-client \
+          --cclientid realm-management \
+          --rolename manage-users || true
+        /opt/keycloak/bin/kcadm.sh add-roles -r gallery \
+          --uusername service-account-gallery-test-client \
+          --cclientid realm-management \
+          --rolename view-users || true
         wait $$kc_pid
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
@@ -111,7 +139,13 @@ services:
     volumes:
       - ./keycloak:/opt/keycloak/data/import:ro
     healthcheck:
-      test: ["CMD", "/bin/bash", "-c", "(echo >/dev/tcp/localhost/8080) 2>/dev/null"]
+      test:
+        [
+          "CMD",
+          "/bin/bash",
+          "-c",
+          "(echo >/dev/tcp/localhost/8080) 2>/dev/null",
+        ]
       interval: 10s
       timeout: 5s
       retries: 15
