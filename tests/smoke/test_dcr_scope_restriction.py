@@ -31,15 +31,13 @@ _SMOKE_TAG_NAME = "smoke-dcr-restriction-test"
 
 
 def _token_scopes(token: str) -> set[str]:
-    """Decode JWT payload without signature verification and return the scope set."""
+    """Decode JWT payload without signature verification and return the permission
+    set, carried as realm roles in ``realm_access.roles``."""
     payload_b64 = token.split(".")[1]
     # Restore base64 padding
     payload_b64 += "=" * (-len(payload_b64) % 4)
     claims = json.loads(base64.urlsafe_b64decode(payload_b64))
-    scope_claim = claims.get("scope", "")
-    if isinstance(scope_claim, list):
-        return set(scope_claim)
-    return set(scope_claim.split())
+    return set((claims.get("realm_access") or {}).get("roles") or [])
 
 
 def _auth(token: str) -> dict:

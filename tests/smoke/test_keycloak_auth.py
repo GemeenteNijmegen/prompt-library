@@ -35,11 +35,11 @@ _ALL_PERMISSION_SCOPES = _ADMIN_SCOPES
 
 
 def _permission_scopes(token: str) -> set[str]:
-    """Return the permission scopes from an RS256 token without verifying the signature."""
+    """Return the permission scopes (carried as realm roles in ``realm_access.roles``)
+    from an RS256 token without verifying the signature."""
     claims = jose_jwt.get_unverified_claims(token)
-    raw = claims.get("scope", "")
-    all_scopes = set(raw.split()) if isinstance(raw, str) else set(raw)
-    return all_scopes & _ALL_PERMISSION_SCOPES
+    roles = (claims.get("realm_access") or {}).get("roles") or []
+    return set(roles) & _ALL_PERMISSION_SCOPES
 
 
 @pytest.mark.smoke
@@ -109,15 +109,15 @@ def test_rs256_user_token_accepted(api_url: str, rs256_user_token: str):
 
 @pytest.mark.smoke
 @skip_if_no_stack
-def test_alice_contributor_has_exactly_contributor_scopes(kc_url: str, alice_token: str):
-    """alice (contributor) must have contributor-level scopes and no admin/publisher extras."""
+def test_alice_publisher_has_exactly_publisher_scopes(kc_url: str, alice_token: str):
+    """alice (org-a publisher) must have publisher-level scopes and no admin extras."""
     got = _permission_scopes(alice_token)
-    assert got == _CONTRIBUTOR_SCOPES, (
+    assert got == _PUBLISHER_SCOPES, (
         f"alice scope mismatch.\n"
-        f"  expected: {sorted(_CONTRIBUTOR_SCOPES)}\n"
+        f"  expected: {sorted(_PUBLISHER_SCOPES)}\n"
         f"  got:      {sorted(got)}\n"
-        f"  extra:    {sorted(got - _CONTRIBUTOR_SCOPES)}\n"
-        f"  missing:  {sorted(_CONTRIBUTOR_SCOPES - got)}"
+        f"  extra:    {sorted(got - _PUBLISHER_SCOPES)}\n"
+        f"  missing:  {sorted(_PUBLISHER_SCOPES - got)}"
     )
 
 

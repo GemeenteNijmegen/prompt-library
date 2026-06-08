@@ -55,11 +55,13 @@ class KeycloakClient:
         """Invalidate all interactive sessions for a Keycloak user.
 
         ``user_external_id`` is the Keycloak user UUID (the ``sub`` claim).
+        Uses POST .../logout (Keycloak 21+ replacement for the deprecated
+        DELETE .../sessions endpoint).
         """
         admin_token = self._get_admin_token()
         try:
-            resp = httpx.delete(
-                f"{self._admin_base()}/users/{user_external_id}/sessions",
+            resp = httpx.post(
+                f"{self._admin_base()}/users/{user_external_id}/logout",
                 headers={"Authorization": f"Bearer {admin_token}"},
                 timeout=10.0,
             )

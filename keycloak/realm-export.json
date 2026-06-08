@@ -155,11 +155,12 @@
       "serviceAccountsEnabled": true,
       "redirectUris": ["http://localhost:9999/*"],
       "webOrigins": [],
-      "defaultClientScopes": ["openid", "profile", "email"],
-      "optionalClientScopes": [
+      "defaultClientScopes": [
+        "openid", "profile", "email",
         "prompt:read", "prompt:create", "prompt:write", "prompt:publish",
         "prompt:rate", "prompt:image", "apikey:create"
       ],
+      "optionalClientScopes": [],
       "protocolMappers": [
         {
           "name": "gallery-audience",
@@ -167,6 +168,20 @@
           "protocolMapper": "oidc-audience-mapper",
           "consentRequired": false,
           "config": { "included.custom.audience": "prompt-gallery-api", "access.token.claim": "true", "id.token.claim": "false" }
+        },
+        {
+          "name": "realm-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "multivalued": "true",
+            "userinfo.token.claim": "false",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String"
+          }
         }
       ]
     },
@@ -193,6 +208,20 @@
           "protocolMapper": "oidc-audience-mapper",
           "consentRequired": false,
           "config": { "included.custom.audience": "prompt-gallery-api", "access.token.claim": "true", "id.token.claim": "false" }
+        },
+        {
+          "name": "realm-management-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "multivalued": "true",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "claim.name": "resource_access.${client_id}.roles",
+            "jsonType.label": "String",
+            "usermodel.clientRoleMapping.clientId": "realm-management"
+          }
         },
         {
           "name": "sub",
@@ -223,7 +252,7 @@
           "config": { "user.attribute": "org_id", "claim.name": "org_id", "jsonType.label": "String", "access.token.claim": "true", "id.token.claim": "false", "userinfo.token.claim": "false" }
         },
         {
-          "name": "permission-scopes-from-roles",
+          "name": "realm-roles",
           "protocol": "openid-connect",
           "protocolMapper": "oidc-usermodel-realm-role-mapper",
           "consentRequired": false,
@@ -232,9 +261,16 @@
             "userinfo.token.claim": "false",
             "id.token.claim": "false",
             "access.token.claim": "true",
-            "claim.name": "scope",
+            "claim.name": "realm_access.roles",
             "jsonType.label": "String"
           }
+        },
+        {
+          "name": "realm-management-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": { "included.custom.audience": "realm-management", "access.token.claim": "true", "id.token.claim": "false" }
         }
       ]
     }
@@ -257,9 +293,24 @@
 
   "users": [
     {
+      "username": "service-account-org-deploy-example",
+      "enabled": true,
+      "serviceAccountClientId": "org-deploy-example",
+      "realmRoles": [
+        "prompt:read", "prompt:create", "prompt:write", "prompt:publish",
+        "prompt:rate", "prompt:image", "apikey:create"
+      ]
+    },
+    {
       "username": "service-account-gallery-test-client",
       "enabled": true,
       "serviceAccountClientId": "gallery-test-client",
+      "realmRoles": [
+        "prompt:read", "prompt:read:restricted", "prompt:create", "prompt:write",
+        "prompt:publish", "prompt:publish:public", "prompt:rate", "prompt:image",
+        "prompt:moderate", "apikey:create", "admin:manage_taxonomy",
+        "admin:manage_users", "admin:read_audit"
+      ],
       "clientRoles": { "realm-management": ["manage-users", "view-users"] }
     },
     {
@@ -295,7 +346,7 @@
       "realmRoles": [
         "prompt:read", "apikey:create",
         "prompt:read:restricted", "prompt:create", "prompt:write",
-        "prompt:rate", "prompt:image"
+        "prompt:rate", "prompt:image", "prompt:publish"
       ],
       "attributes": { "org_id": ["org-a"] },
       "credentials": [
