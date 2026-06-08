@@ -28,6 +28,8 @@ The gallery's identity and authorization design recognises five actor concepts. 
 
 - **End Users do not normally see the word "Organisation" in the gallery UI.** They log in with their work email; routing to their Organisation is implicit (email-domain mapping — see ADR 0003). The term lives in admin UI and docs, not in the user-facing product.
 
+- **"MCP server" is gallery-side infrastructure, not an Integration.** The gallery exposes its prompt API over the Model Context Protocol via an **MCP server** — an OAuth *resource server* that translates MCP tool calls into gallery API calls on behalf of the calling End User. It is part of the gallery, not an actor. The **Integration** (above) is the *client* side — the chat client / LLM app that connects *to* the MCP server. One MCP server (the gallery's); many Integrations (each org-deployed chat client). The MCP server holds no authorization logic of its own: it forwards the End User's credential and the gallery enforces visibility and scope exactly as for any other API caller.
+
 ## Visibility model
 
 Prompts have a visibility state that determines who can see them. The state is independent from scope-based authorization: scopes gate *verbs* (read, write, publish, etc.), and visibility is a row-level filter applied uniformly to read endpoints regardless of which scopes the caller holds.
@@ -60,4 +62,5 @@ There are two distinct "publish" actions, with different blast radii:
 
 - ADR 0003 — Identity Provider: Keycloak
 - ADR 0004 — Access Model: MCP + DCR with API-key Fallback
+- ADR 0005 — MCP Server: Token-Forwarding Sidecar
 - PLAN.md — Decision log and API specification
