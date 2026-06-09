@@ -168,6 +168,110 @@ async def search_prompts(
     return response.json()
 
 
+@mcp.tool()
+async def get_prompt(prompt_id: int) -> dict[str, Any]:
+    """Fetch full details for a single prompt, including prompt_text and example_output.
+
+    Use this after search_prompts to retrieve the complete text of a prompt the
+    caller has permission to view. Visibility is enforced by the gallery.
+
+    Args:
+        prompt_id: Numeric prompt ID returned by search_prompts.
+    """
+    auth = _authorization.get()
+    if not auth:
+        raise ValueError(
+            "Missing Authorization header — the caller must provide a bearer token or pg_… API key."
+        )
+
+    async with httpx.AsyncClient(timeout=settings.GALLERY_REQUEST_TIMEOUT) as client:
+        response = await client.get(
+            f"{settings.GALLERY_API_URL}/api/v1/prompts/{prompt_id}",
+            headers={"Authorization": auth},
+        )
+        if response.status_code == 401:
+            _gallery_auth_failed.set(True)
+        response.raise_for_status()
+
+    return response.json()
+
+
+@mcp.tool()
+async def list_featured() -> dict[str, Any]:
+    """Return the curated list of featured prompts.
+
+    Args: none
+    """
+    auth = _authorization.get()
+    if not auth:
+        raise ValueError(
+            "Missing Authorization header — the caller must provide a bearer token or pg_… API key."
+        )
+
+    async with httpx.AsyncClient(timeout=settings.GALLERY_REQUEST_TIMEOUT) as client:
+        response = await client.get(
+            f"{settings.GALLERY_API_URL}/api/v1/prompts/featured",
+            headers={"Authorization": auth},
+        )
+        if response.status_code == 401:
+            _gallery_auth_failed.set(True)
+        response.raise_for_status()
+
+    return response.json()
+
+
+@mcp.tool()
+async def list_categories() -> dict[str, Any]:
+    """Return all prompt categories available in the gallery.
+
+    Use the returned category IDs with search_prompts(category_id=…).
+
+    Args: none
+    """
+    auth = _authorization.get()
+    if not auth:
+        raise ValueError(
+            "Missing Authorization header — the caller must provide a bearer token or pg_… API key."
+        )
+
+    async with httpx.AsyncClient(timeout=settings.GALLERY_REQUEST_TIMEOUT) as client:
+        response = await client.get(
+            f"{settings.GALLERY_API_URL}/api/v1/categories",
+            headers={"Authorization": auth},
+        )
+        if response.status_code == 401:
+            _gallery_auth_failed.set(True)
+        response.raise_for_status()
+
+    return response.json()
+
+
+@mcp.tool()
+async def list_tags() -> dict[str, Any]:
+    """Return all tags in the gallery.
+
+    Use the returned tag names with search_prompts(tag=…).
+
+    Args: none
+    """
+    auth = _authorization.get()
+    if not auth:
+        raise ValueError(
+            "Missing Authorization header — the caller must provide a bearer token or pg_… API key."
+        )
+
+    async with httpx.AsyncClient(timeout=settings.GALLERY_REQUEST_TIMEOUT) as client:
+        response = await client.get(
+            f"{settings.GALLERY_API_URL}/api/v1/tags",
+            headers={"Authorization": auth},
+        )
+        if response.status_code == 401:
+            _gallery_auth_failed.set(True)
+        response.raise_for_status()
+
+    return response.json()
+
+
 @mcp.custom_route("/.well-known/oauth-protected-resource", methods=["GET"])
 async def oauth_protected_resource(request: Request) -> JSONResponse:
     """RFC 9728 protected-resource metadata for OAuth client discovery."""
