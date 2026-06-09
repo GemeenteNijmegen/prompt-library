@@ -5,14 +5,18 @@ status: accepted
 # MCP Server: Token-Forwarding Sidecar
 
 The gallery exposes its prompt API over the Model Context Protocol (MCP) for chat
-clients. We add a **thin sidecar MCP server** — its own deployable in this repo (`mcp/`)
-— that translates MCP tool calls into ordinary gallery REST calls, **forwarding the End
-User's bearer token unchanged**. The sidecar holds **no authorization logic of its own**:
-the gallery validates the token and applies its visibility + scope filter exactly as for
-any other API caller, so the gallery remains the single enforcement point and the MCP
-surface can never reveal a prompt the REST API would not. See
-[CONTEXT.md](../../CONTEXT.md) ("MCP server" vs "Integration") and ADR 0004 for the
-underlying access model.
+clients. We add a **thin sidecar MCP server** — its own deployable in this repo
+(`gallery_mcp/`) — that translates MCP tool calls into ordinary gallery REST calls,
+**forwarding the End User's bearer token unchanged**. The sidecar holds **no
+authorization logic of its own**: the gallery validates the token and applies its
+visibility + scope filter exactly as for any other API caller, so the gallery remains the
+single enforcement point and the MCP surface can never reveal a prompt the REST API would
+not. See [CONTEXT.md](../../CONTEXT.md) ("MCP server" vs "Integration") and ADR 0004 for
+the underlying access model.
+
+> **Package naming:** the local package is `gallery_mcp/` rather than `mcp/`. A `mcp/`
+> directory at the project root would shadow the installed `mcp` SDK (`mcp.server.fastmcp`,
+> `mcp.types`, etc.) in Python's import resolution, breaking all SDK imports.
 
 ## Scope of the first increment
 
