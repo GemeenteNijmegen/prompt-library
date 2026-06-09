@@ -9,7 +9,6 @@
   "resetPasswordAllowed": true,
   "editUsernameAllowed": false,
   "bruteForceProtected": false,
-
   "accessTokenLifespan": 900,
   "ssoSessionMaxLifespan": 2592000,
   "ssoSessionIdleTimeout": 604800,
@@ -18,72 +17,214 @@
   "offlineSessionMaxLifespanEnabled": true,
   "revokeRefreshToken": true,
   "refreshTokenMaxReuse": 0,
-
   "organizationsEnabled": true,
-
   "clientScopes": [
-    { "name": "prompt:read",            "protocol": "openid-connect", "attributes": { "include.in.token.scope": "false" } },
-    { "name": "prompt:read:restricted", "protocol": "openid-connect", "attributes": { "include.in.token.scope": "false" } },
-    { "name": "prompt:create",          "protocol": "openid-connect", "attributes": { "include.in.token.scope": "false" } },
-    { "name": "prompt:write",           "protocol": "openid-connect", "attributes": { "include.in.token.scope": "false" } },
-    { "name": "prompt:publish",         "protocol": "openid-connect", "attributes": { "include.in.token.scope": "false" } },
-    { "name": "prompt:publish:public",  "protocol": "openid-connect", "attributes": { "include.in.token.scope": "false" } },
-    { "name": "prompt:rate",            "protocol": "openid-connect", "attributes": { "include.in.token.scope": "false" } },
-    { "name": "prompt:image",           "protocol": "openid-connect", "attributes": { "include.in.token.scope": "false" } },
-    { "name": "prompt:moderate",        "protocol": "openid-connect", "attributes": { "include.in.token.scope": "false" } },
-    { "name": "apikey:create",          "protocol": "openid-connect", "attributes": { "include.in.token.scope": "false" } },
-    { "name": "admin:manage_taxonomy",  "protocol": "openid-connect", "attributes": { "include.in.token.scope": "false" } },
-    { "name": "admin:manage_users",     "protocol": "openid-connect", "attributes": { "include.in.token.scope": "false" } },
-    { "name": "admin:read_audit",       "protocol": "openid-connect", "attributes": { "include.in.token.scope": "false" } }
+    {
+      "name": "prompt:read",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false"
+      }
+    },
+    {
+      "name": "prompt:read:restricted",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false"
+      }
+    },
+    {
+      "name": "prompt:create",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false"
+      }
+    },
+    {
+      "name": "prompt:write",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false"
+      }
+    },
+    {
+      "name": "prompt:publish",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false"
+      }
+    },
+    {
+      "name": "prompt:publish:public",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false"
+      }
+    },
+    {
+      "name": "prompt:rate",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false"
+      }
+    },
+    {
+      "name": "prompt:image",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false"
+      }
+    },
+    {
+      "name": "prompt:moderate",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false"
+      }
+    },
+    {
+      "name": "apikey:create",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false"
+      }
+    },
+    {
+      "name": "admin:manage_taxonomy",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false"
+      }
+    },
+    {
+      "name": "admin:manage_users",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false"
+      }
+    },
+    {
+      "name": "admin:read_audit",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false"
+      }
+    }
   ],
-
   "roles": {
     "realm": [
-      { "name": "prompt:read",            "composite": false },
-      { "name": "prompt:read:restricted", "composite": false },
-      { "name": "prompt:create",          "composite": false },
-      { "name": "prompt:write",           "composite": false },
-      { "name": "prompt:publish",         "composite": false },
-      { "name": "prompt:publish:public",  "composite": false },
-      { "name": "prompt:rate",            "composite": false },
-      { "name": "prompt:image",           "composite": false },
-      { "name": "prompt:moderate",        "composite": false },
-      { "name": "apikey:create",          "composite": false },
-      { "name": "admin:manage_taxonomy",  "composite": false },
-      { "name": "admin:manage_users",     "composite": false },
-      { "name": "admin:read_audit",       "composite": false },
-
+      {
+        "name": "prompt:read",
+        "composite": false
+      },
+      {
+        "name": "prompt:read:restricted",
+        "composite": false
+      },
+      {
+        "name": "prompt:create",
+        "composite": false
+      },
+      {
+        "name": "prompt:write",
+        "composite": false
+      },
+      {
+        "name": "prompt:publish",
+        "composite": false
+      },
+      {
+        "name": "prompt:publish:public",
+        "composite": false
+      },
+      {
+        "name": "prompt:rate",
+        "composite": false
+      },
+      {
+        "name": "prompt:image",
+        "composite": false
+      },
+      {
+        "name": "prompt:moderate",
+        "composite": false
+      },
+      {
+        "name": "apikey:create",
+        "composite": false
+      },
+      {
+        "name": "admin:manage_taxonomy",
+        "composite": false
+      },
+      {
+        "name": "admin:manage_users",
+        "composite": false
+      },
+      {
+        "name": "admin:read_audit",
+        "composite": false
+      },
       {
         "name": "viewer",
         "description": "Read-only: prompt:read + apikey:create",
         "composite": true,
-        "composites": { "realm": ["prompt:read", "apikey:create"] }
+        "composites": {
+          "realm": [
+            "prompt:read",
+            "apikey:create"
+          ]
+        }
       },
       {
         "name": "contributor",
         "description": "viewer + prompt:read:restricted prompt:create prompt:write prompt:rate prompt:image",
         "composite": true,
-        "composites": { "realm": ["viewer", "prompt:read:restricted", "prompt:create", "prompt:write", "prompt:rate", "prompt:image"] }
+        "composites": {
+          "realm": [
+            "viewer",
+            "prompt:read:restricted",
+            "prompt:create",
+            "prompt:write",
+            "prompt:rate",
+            "prompt:image"
+          ]
+        }
       },
       {
         "name": "publisher",
         "description": "contributor + prompt:publish",
         "composite": true,
-        "composites": { "realm": ["contributor", "prompt:publish"] }
+        "composites": {
+          "realm": [
+            "contributor",
+            "prompt:publish"
+          ]
+        }
       },
       {
         "name": "admin",
         "description": "publisher + prompt:publish:public prompt:moderate admin:*",
         "composite": true,
-        "composites": { "realm": ["publisher", "prompt:publish:public", "prompt:moderate", "admin:manage_taxonomy", "admin:manage_users", "admin:read_audit"] }
+        "composites": {
+          "realm": [
+            "publisher",
+            "prompt:publish:public",
+            "prompt:moderate",
+            "admin:manage_taxonomy",
+            "admin:manage_users",
+            "admin:read_audit"
+          ]
+        }
       }
     ]
   },
-
   "groups": [
-    { "name": "gallery-ops", "path": "/gallery-ops" }
+    {
+      "name": "gallery-ops",
+      "path": "/gallery-ops"
+    }
   ],
-
   "clients": [
     {
       "clientId": "gallery-api",
@@ -94,7 +235,6 @@
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": false
     },
-
     {
       "clientId": "gallery-app",
       "enabled": true,
@@ -103,14 +243,33 @@
       "standardFlowEnabled": true,
       "implicitFlowEnabled": false,
       "serviceAccountsEnabled": false,
-      "redirectUris": ["http://localhost:5173/*", "http://localhost:8000/*"],
-      "webOrigins": ["http://localhost:5173", "http://localhost:8000"],
-      "defaultClientScopes": ["openid", "profile", "email"],
+      "redirectUris": [
+        "http://localhost:5173/*",
+        "http://localhost:8000/*"
+      ],
+      "webOrigins": [
+        "http://localhost:5173",
+        "http://localhost:8000"
+      ],
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email"
+      ],
       "optionalClientScopes": [
-        "prompt:read", "prompt:read:restricted", "prompt:create", "prompt:write",
-        "prompt:publish", "prompt:publish:public", "prompt:rate", "prompt:image",
-        "prompt:moderate", "apikey:create", "admin:manage_taxonomy",
-        "admin:manage_users", "admin:read_audit"
+        "prompt:read",
+        "prompt:read:restricted",
+        "prompt:create",
+        "prompt:write",
+        "prompt:publish",
+        "prompt:publish:public",
+        "prompt:rate",
+        "prompt:image",
+        "prompt:moderate",
+        "apikey:create",
+        "admin:manage_taxonomy",
+        "admin:manage_users",
+        "admin:read_audit"
       ],
       "protocolMappers": [
         {
@@ -118,32 +277,49 @@
           "protocol": "openid-connect",
           "protocolMapper": "oidc-audience-mapper",
           "consentRequired": false,
-          "config": { "included.custom.audience": "prompt-gallery-api", "access.token.claim": "true", "id.token.claim": "false" }
+          "config": {
+            "included.custom.audience": "prompt-gallery-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
         },
         {
           "name": "sub",
           "protocol": "openid-connect",
           "protocolMapper": "oidc-sub-mapper",
           "consentRequired": false,
-          "config": { "access.token.claim": "true", "id.token.claim": "true" }
+          "config": {
+            "access.token.claim": "true",
+            "id.token.claim": "true"
+          }
         },
         {
           "name": "email",
           "protocol": "openid-connect",
           "protocolMapper": "oidc-usermodel-property-mapper",
           "consentRequired": false,
-          "config": { "user.attribute": "email", "claim.name": "email", "jsonType.label": "String", "access.token.claim": "true", "id.token.claim": "true", "userinfo.token.claim": "true" }
+          "config": {
+            "user.attribute": "email",
+            "claim.name": "email",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
         },
         {
           "name": "full name",
           "protocol": "openid-connect",
           "protocolMapper": "oidc-full-name-mapper",
           "consentRequired": false,
-          "config": { "access.token.claim": "true", "id.token.claim": "true", "userinfo.token.claim": "true" }
+          "config": {
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
         }
       ]
     },
-
     {
       "clientId": "org-deploy-example",
       "enabled": true,
@@ -153,12 +329,21 @@
       "standardFlowEnabled": true,
       "implicitFlowEnabled": false,
       "serviceAccountsEnabled": true,
-      "redirectUris": ["http://localhost:9999/*"],
+      "redirectUris": [
+        "http://localhost:9999/*"
+      ],
       "webOrigins": [],
       "defaultClientScopes": [
-        "openid", "profile", "email",
-        "prompt:read", "prompt:create", "prompt:write", "prompt:publish",
-        "prompt:rate", "prompt:image", "apikey:create"
+        "openid",
+        "profile",
+        "email",
+        "prompt:read",
+        "prompt:create",
+        "prompt:write",
+        "prompt:publish",
+        "prompt:rate",
+        "prompt:image",
+        "apikey:create"
       ],
       "optionalClientScopes": [],
       "protocolMappers": [
@@ -167,7 +352,11 @@
           "protocol": "openid-connect",
           "protocolMapper": "oidc-audience-mapper",
           "consentRequired": false,
-          "config": { "included.custom.audience": "prompt-gallery-api", "access.token.claim": "true", "id.token.claim": "false" }
+          "config": {
+            "included.custom.audience": "prompt-gallery-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
         },
         {
           "name": "realm-roles",
@@ -185,7 +374,6 @@
         }
       ]
     },
-
     {
       "clientId": "gallery-test-client",
       "enabled": true,
@@ -195,11 +383,22 @@
       "standardFlowEnabled": false,
       "serviceAccountsEnabled": true,
       "defaultClientScopes": [
-        "openid", "profile", "email",
-        "prompt:read", "prompt:read:restricted", "prompt:create", "prompt:write",
-        "prompt:publish", "prompt:publish:public", "prompt:rate", "prompt:image",
-        "prompt:moderate", "apikey:create", "admin:manage_taxonomy",
-        "admin:manage_users", "admin:read_audit"
+        "openid",
+        "profile",
+        "email",
+        "prompt:read",
+        "prompt:read:restricted",
+        "prompt:create",
+        "prompt:write",
+        "prompt:publish",
+        "prompt:publish:public",
+        "prompt:rate",
+        "prompt:image",
+        "prompt:moderate",
+        "apikey:create",
+        "admin:manage_taxonomy",
+        "admin:manage_users",
+        "admin:read_audit"
       ],
       "protocolMappers": [
         {
@@ -207,7 +406,11 @@
           "protocol": "openid-connect",
           "protocolMapper": "oidc-audience-mapper",
           "consentRequired": false,
-          "config": { "included.custom.audience": "prompt-gallery-api", "access.token.claim": "true", "id.token.claim": "false" }
+          "config": {
+            "included.custom.audience": "prompt-gallery-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
         },
         {
           "name": "realm-management-roles",
@@ -228,28 +431,49 @@
           "protocol": "openid-connect",
           "protocolMapper": "oidc-sub-mapper",
           "consentRequired": false,
-          "config": { "access.token.claim": "true", "id.token.claim": "true" }
+          "config": {
+            "access.token.claim": "true",
+            "id.token.claim": "true"
+          }
         },
         {
           "name": "email",
           "protocol": "openid-connect",
           "protocolMapper": "oidc-usermodel-property-mapper",
           "consentRequired": false,
-          "config": { "user.attribute": "email", "claim.name": "email", "jsonType.label": "String", "access.token.claim": "true", "id.token.claim": "true", "userinfo.token.claim": "true" }
+          "config": {
+            "user.attribute": "email",
+            "claim.name": "email",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
         },
         {
           "name": "full name",
           "protocol": "openid-connect",
           "protocolMapper": "oidc-full-name-mapper",
           "consentRequired": false,
-          "config": { "access.token.claim": "true", "id.token.claim": "true", "userinfo.token.claim": "true" }
+          "config": {
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
         },
         {
           "name": "org_id",
           "protocol": "openid-connect",
           "protocolMapper": "oidc-usermodel-attribute-mapper",
           "consentRequired": false,
-          "config": { "user.attribute": "org_id", "claim.name": "org_id", "jsonType.label": "String", "access.token.claim": "true", "id.token.claim": "false", "userinfo.token.claim": "false" }
+          "config": {
+            "user.attribute": "org_id",
+            "claim.name": "org_id",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "false"
+          }
         },
         {
           "name": "realm-roles",
@@ -270,35 +494,62 @@
           "protocol": "openid-connect",
           "protocolMapper": "oidc-audience-mapper",
           "consentRequired": false,
-          "config": { "included.custom.audience": "realm-management", "access.token.claim": "true", "id.token.claim": "false" }
+          "config": {
+            "included.custom.audience": "realm-management",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
         }
+      ]
+    },
+    {
+      "clientId": "mcp-inspector",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:6274/*"
+      ],
+      "webOrigins": [
+        "http://localhost:6274"
       ]
     }
   ],
-
   "organizations": [
     {
       "id": "00000000-0000-0001-0000-000000000001",
-      "name": "org-a", "alias": "org-a", "enabled": true,
-      "description": "Test organisation A — cross-org isolation tests",
-      "attributes": {}, "domains": []
+      "name": "org-a",
+      "alias": "org-a",
+      "enabled": true,
+      "description": "Test organisation A \u2014 cross-org isolation tests",
+      "attributes": {},
+      "domains": []
     },
     {
       "id": "00000000-0000-0001-0000-000000000002",
-      "name": "org-b", "alias": "org-b", "enabled": true,
-      "description": "Test organisation B — cross-org isolation tests",
-      "attributes": {}, "domains": []
+      "name": "org-b",
+      "alias": "org-b",
+      "enabled": true,
+      "description": "Test organisation B \u2014 cross-org isolation tests",
+      "attributes": {},
+      "domains": []
     }
   ],
-
   "users": [
     {
       "username": "service-account-org-deploy-example",
       "enabled": true,
       "serviceAccountClientId": "org-deploy-example",
       "realmRoles": [
-        "prompt:read", "prompt:create", "prompt:write", "prompt:publish",
-        "prompt:rate", "prompt:image", "apikey:create"
+        "prompt:read",
+        "prompt:create",
+        "prompt:write",
+        "prompt:publish",
+        "prompt:rate",
+        "prompt:image",
+        "apikey:create"
       ]
     },
     {
@@ -306,12 +557,26 @@
       "enabled": true,
       "serviceAccountClientId": "gallery-test-client",
       "realmRoles": [
-        "prompt:read", "prompt:read:restricted", "prompt:create", "prompt:write",
-        "prompt:publish", "prompt:publish:public", "prompt:rate", "prompt:image",
-        "prompt:moderate", "apikey:create", "admin:manage_taxonomy",
-        "admin:manage_users", "admin:read_audit"
+        "prompt:read",
+        "prompt:read:restricted",
+        "prompt:create",
+        "prompt:write",
+        "prompt:publish",
+        "prompt:publish:public",
+        "prompt:rate",
+        "prompt:image",
+        "prompt:moderate",
+        "apikey:create",
+        "admin:manage_taxonomy",
+        "admin:manage_users",
+        "admin:read_audit"
       ],
-      "clientRoles": { "realm-management": ["manage-users", "view-users"] }
+      "clientRoles": {
+        "realm-management": [
+          "manage-users",
+          "view-users"
+        ]
+      }
     },
     {
       "username": "devuser",
@@ -321,10 +586,19 @@
       "enabled": true,
       "emailVerified": true,
       "realmRoles": [
-        "prompt:read", "prompt:read:restricted", "prompt:create", "prompt:write",
-        "prompt:publish", "prompt:publish:public", "prompt:rate", "prompt:image",
-        "prompt:moderate", "apikey:create", "admin:manage_taxonomy",
-        "admin:manage_users", "admin:read_audit"
+        "prompt:read",
+        "prompt:read:restricted",
+        "prompt:create",
+        "prompt:write",
+        "prompt:publish",
+        "prompt:publish:public",
+        "prompt:rate",
+        "prompt:image",
+        "prompt:moderate",
+        "apikey:create",
+        "admin:manage_taxonomy",
+        "admin:manage_users",
+        "admin:read_audit"
       ],
       "credentials": [
         {
@@ -344,13 +618,26 @@
       "enabled": true,
       "emailVerified": true,
       "realmRoles": [
-        "prompt:read", "apikey:create",
-        "prompt:read:restricted", "prompt:create", "prompt:write",
-        "prompt:rate", "prompt:image", "prompt:publish"
+        "prompt:read",
+        "apikey:create",
+        "prompt:read:restricted",
+        "prompt:create",
+        "prompt:write",
+        "prompt:rate",
+        "prompt:image",
+        "prompt:publish"
       ],
-      "attributes": { "org_id": ["org-a"] },
+      "attributes": {
+        "org_id": [
+          "org-a"
+        ]
+      },
       "credentials": [
-        { "type": "password", "temporary": false, "value": "dev" }
+        {
+          "type": "password",
+          "temporary": false,
+          "value": "dev"
+        }
       ]
     },
     {
@@ -361,10 +648,21 @@
       "lastName": "OrgB",
       "enabled": true,
       "emailVerified": true,
-      "realmRoles": ["prompt:read", "apikey:create"],
-      "attributes": { "org_id": ["org-b"] },
+      "realmRoles": [
+        "prompt:read",
+        "apikey:create"
+      ],
+      "attributes": {
+        "org_id": [
+          "org-b"
+        ]
+      },
       "credentials": [
-        { "type": "password", "temporary": false, "value": "dev" }
+        {
+          "type": "password",
+          "temporary": false,
+          "value": "dev"
+        }
       ]
     },
     {
@@ -376,13 +674,26 @@
       "enabled": true,
       "emailVerified": true,
       "realmRoles": [
-        "prompt:read", "apikey:create",
-        "prompt:read:restricted", "prompt:create", "prompt:write",
-        "prompt:rate", "prompt:image", "prompt:publish"
+        "prompt:read",
+        "apikey:create",
+        "prompt:read:restricted",
+        "prompt:create",
+        "prompt:write",
+        "prompt:rate",
+        "prompt:image",
+        "prompt:publish"
       ],
-      "attributes": { "org_id": ["org-b"] },
+      "attributes": {
+        "org_id": [
+          "org-b"
+        ]
+      },
       "credentials": [
-        { "type": "password", "temporary": false, "value": "dev" }
+        {
+          "type": "password",
+          "temporary": false,
+          "value": "dev"
+        }
       ]
     },
     {
@@ -394,14 +705,29 @@
       "enabled": true,
       "emailVerified": true,
       "realmRoles": [
-        "prompt:read", "prompt:read:restricted", "prompt:create", "prompt:write",
-        "prompt:publish", "prompt:publish:public", "prompt:rate", "prompt:image",
-        "prompt:moderate", "apikey:create", "admin:manage_taxonomy",
-        "admin:manage_users", "admin:read_audit"
+        "prompt:read",
+        "prompt:read:restricted",
+        "prompt:create",
+        "prompt:write",
+        "prompt:publish",
+        "prompt:publish:public",
+        "prompt:rate",
+        "prompt:image",
+        "prompt:moderate",
+        "apikey:create",
+        "admin:manage_taxonomy",
+        "admin:manage_users",
+        "admin:read_audit"
       ],
-      "groups": ["/gallery-ops"],
+      "groups": [
+        "/gallery-ops"
+      ],
       "credentials": [
-        { "type": "password", "temporary": false, "value": "dev" }
+        {
+          "type": "password",
+          "temporary": false,
+          "value": "dev"
+        }
       ]
     }
   ]
