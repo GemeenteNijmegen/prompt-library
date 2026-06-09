@@ -12,6 +12,20 @@
 #   docker compose --profile simple up                     # SQLite, single container
 #   docker compose --profile embeddings up                 # bundled model, real semantic search
 
+x-mcp-base: &mcp-base
+  build:
+    context: .
+    dockerfile: Dockerfile.mcp
+  ports:
+    - "${MCP_PORT:-8001}:8001"
+  env_file:
+    - path: .env
+      required: false
+
+x-mcp-env: &mcp-env
+  MCP_RESOURCE_URL: "${MCP_RESOURCE_URL:-http://localhost:8001}"
+  KEYCLOAK_REALM_URL: "${KEYCLOAK_REALM_URL:-http://localhost:8080/realms/gallery}"
+
 services:
   # ── Infrastructure ─────────────────────────────────────────────────────────
 
@@ -233,42 +247,26 @@ services:
       redis:
         condition: service_healthy
 
-  # ── MCP sidecar: full stack (token-forwarding, crypto-free, ADR 0005) ────────
+  # ── MCP sidecar (token-forwarding, crypto-free, ADR 0005) ───────────────────
+  # x-mcp-base / x-mcp-env: shared build + port + env anchors; only GALLERY_API_URL
+  # and depends_on differ between full and dev variants.
 
   mcp:
+    <<: *mcp-base
     profiles: [full]
-    build:
-      context: .
-      dockerfile: Dockerfile.mcp
-    ports:
-      - "${MCP_PORT:-8001}:8001"
-    env_file:
-      - path: .env
-        required: false
     environment:
+      <<: *mcp-env
       GALLERY_API_URL: http://app:8000
-      MCP_RESOURCE_URL: "${MCP_RESOURCE_URL:-http://localhost:8001}"
-      KEYCLOAK_REALM_URL: "${KEYCLOAK_REALM_URL:-http://localhost:8080/realms/gallery}"
     depends_on:
       app:
         condition: service_started
 
-  # ── MCP sidecar: dev (gallery_mcp volume for live edits) ─────────────────
-
   mcp-dev:
+    <<: *mcp-base
     profiles: [dev]
-    build:
-      context: .
-      dockerfile: Dockerfile.mcp
-    ports:
-      - "${MCP_PORT:-8001}:8001"
-    env_file:
-      - path: .env
-        required: false
     environment:
+      <<: *mcp-env
       GALLERY_API_URL: http://app-dev:8000
-      MCP_RESOURCE_URL: "${MCP_RESOURCE_URL:-http://localhost:8001}"
-      KEYCLOAK_REALM_URL: "${KEYCLOAK_REALM_URL:-http://localhost:8080/realms/gallery}"
     volumes:
       - ./gallery_mcp:/app/gallery_mcp
     depends_on:
