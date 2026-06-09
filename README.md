@@ -151,6 +151,68 @@ python scripts/keycloak_token.py
 python scripts/keycloak_token.py --grant password --username devuser --password devpass
 ```
 
+## MCP sidecar
+
+The `gallery_mcp` package is a token-forwarding MCP sidecar (see ADR 0005). It exposes the gallery's `search_prompts` tool over the [Model Context Protocol](https://modelcontextprotocol.io/) so AI assistants can search prompts directly. It holds zero authorization logic — your bearer token is forwarded unchanged to the gallery, which enforces all visibility rules.
+
+### Start
+
+Requires the gallery API to be running first (`uvicorn src.main:app --reload` or `docker compose --profile dev up`).
+
+```bash
+python -m gallery_mcp
+# Serving on http://0.0.0.0:8001
+```
+
+> **Python 3.14 users:** `uvloop` 0.22.1 (installed by `uvicorn[standard]`) tops out at Python 3.13. The sidecar passes `loop="asyncio"` explicitly so uvloop is bypassed — no action needed.
+
+### Health check
+
+```bash
+curl http://localhost:8001/health
+# {"status":"ok"}
+```
+
+No response (connection accepted but silent) usually means a stale process is still bound to port 8001:
+
+```bash
+lsof -ti :8001 | xargs kill -9 2>/dev/null
+python -m gallery_mcp
+```
+
+### Verify the tool end-to-end
+
+The gallery must be in **stub auth mode** (`JWT_SECRET_KEY` set, `JWKS_URI` empty — the default `.env`). If you recently changed `.env`, reload the gallery before testing.
+
+```bash
+# Mint a short-lived HS256 token and call search_prompts
+TOKEN=$(python scripts/dev_token.py --scope prompt:read) && \
+curl -s -X POST http://localhost:8001/mcp \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"search_prompts","arguments":{"query":"test","per_page":5}}}' | jq .
+```
+
+Expected: a JSON-RPC result with a `content[0].text` containing the gallery's paginated response. A `401 Unauthorized` in the error text means the gallery rejected the token — check that `JWKS_URI` is unset and restart the gallery.
+
+### Connect MCP Inspector
+
+1. Open [MCP Inspector](https://github.com/modelcontextprotocol/inspector) in a browser.
+2. Transport: **Streamable HTTP**
+3. URL: `http://localhost:8001/mcp`
+4. Add header `Authorization: Bearer <token from dev_token.py>`
+
+The `search_prompts` tool will appear in the tools list. Call it with a `query` argument to verify the full round-trip.
+
+### Running MCP unit tests
+
+```bash
+pytest tests/test_mcp_search_prompts.py -v
+```
+
+These tests stub the gallery HTTP call with `respx` and run without a live stack.
+
 ## Authentication
 
 All protected endpoints use `Authorization: Bearer <jwt>`. See ADR 0003 (identity provider: Keycloak) and ADR 0004 (access model) for the full design.
