@@ -18,36 +18,100 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from gallery_mcp.config import settings
 
-# Raw Authorization header value for the current request — set by
-# _CaptureAuthorizationMiddleware before the tool is called.
+# Raw Authorization header value for the current request.
 _authorization: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "_authorization", default=None
 )
 
+# Set to True by search_prompts when the gallery returns 401 — signals the
+# _AuthMiddleware to translate the FastMCP response to a spec-shaped HTTP 401.
+_gallery_auth_failed: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "_gallery_auth_failed", default=False
+)
 
-class _CaptureAuthorizationMiddleware:
-    """ASGI middleware that copies the raw Authorization header into a context var.
+# Paths that must not require an Authorization header.
+_PUBLIC_PATHS: frozenset[str] = frozenset(
+    {"/.well-known/oauth-protected-resource", "/health"}
+)
 
-    No validation, no decoding — the value is forwarded verbatim to the gallery.
+
+def _www_authenticate_value() -> str:
+    url = f"{settings.MCP_RESOURCE_URL}/.well-known/oauth-protected-resource"
+    return f'Bearer resource_metadata="{url}"'
+
+
+class _AuthMiddleware:
+    """Single middleware for auth capture, missing-auth 401, and gallery-401 translation.
+
+    Three responsibilities (all crypto-free, ADR 0005 invariant preserved):
+    1. Copies the raw Authorization header into ``_authorization`` for tool use.
+    2. Intercepts requests to protected endpoints with no Authorization header and
+       returns HTTP 401 + WWW-Authenticate before FastMCP sees the request.
+    3. Wraps ``send`` to detect when the tool set ``_gallery_auth_failed`` and
+       upgrades the FastMCP HTTP 200 JSON-RPC error into an HTTP 401 + WWW-Authenticate.
     """
 
     def __init__(self, app: ASGIApp) -> None:
         self._app = app
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] == "http":
-            auth_value: str | None = None
-            for name, value in scope.get("headers", []):
-                if name.lower() == b"authorization":
-                    auth_value = value.decode()
-                    break
-            token = _authorization.set(auth_value)
-            try:
-                await self._app(scope, receive, send)
-            finally:
-                _authorization.reset(token)
-        else:
+        if scope["type"] != "http":
             await self._app(scope, receive, send)
+            return
+
+        auth_value: str | None = None
+        for name, value in scope.get("headers", []):
+            if name.lower() == b"authorization":
+                auth_value = value.decode()
+                break
+
+        path = scope.get("path", "")
+
+        if path not in _PUBLIC_PATHS and auth_value is None:
+            await self._send_401(send)
+            return
+
+        auth_token = _authorization.set(auth_value)
+        failed_token = _gallery_auth_failed.set(False)
+        try:
+            await self._app(scope, receive, self._patched_send(send))
+        finally:
+            _authorization.reset(auth_token)
+            _gallery_auth_failed.reset(failed_token)
+
+    def _patched_send(self, send: Send):
+        async def _send(message) -> None:
+            if (
+                message["type"] == "http.response.start"
+                and _gallery_auth_failed.get()
+            ):
+                www = _www_authenticate_value().encode()
+                headers = [
+                    (k, v)
+                    for k, v in message.get("headers", [])
+                    if k.lower() != b"www-authenticate"
+                ]
+                headers.append((b"www-authenticate", www))
+                message = {**message, "status": 401, "headers": headers}
+            await send(message)
+
+        return _send
+
+    async def _send_401(self, send: Send) -> None:
+        www = _www_authenticate_value().encode()
+        body = b'{"error":"unauthorized"}'
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 401,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"www-authenticate", www),
+                    (b"content-length", str(len(body)).encode()),
+                ],
+            }
+        )
+        await send({"type": "http.response.body", "body": body, "more_body": False})
 
 
 mcp = FastMCP("Prompt Gallery", stateless_http=True, json_response=True)
@@ -97,9 +161,23 @@ async def search_prompts(
             params=params,
             headers={"Authorization": auth},
         )
+        if response.status_code == 401:
+            _gallery_auth_failed.set(True)
         response.raise_for_status()
 
     return response.json()
+
+
+@mcp.custom_route("/.well-known/oauth-protected-resource", methods=["GET"])
+async def oauth_protected_resource(request: Request) -> JSONResponse:
+    """RFC 9728 protected-resource metadata for OAuth client discovery."""
+    return JSONResponse(
+        {
+            "resource": settings.MCP_RESOURCE_URL,
+            "authorization_servers": [settings.KEYCLOAK_REALM_URL],
+            "bearer_methods_supported": ["header"],
+        }
+    )
 
 
 @mcp.custom_route("/health", methods=["GET"])
@@ -108,8 +186,8 @@ async def health(request: Request) -> JSONResponse:
 
 
 def build_app() -> ASGIApp:
-    """Return the ASGI app with the auth-capture middleware applied."""
-    app: ASGIApp = _CaptureAuthorizationMiddleware(mcp.streamable_http_app())
+    """Return the ASGI app with auth middleware and CORS applied."""
+    app: ASGIApp = _AuthMiddleware(mcp.streamable_http_app())
     return CORSMiddleware(
         app,
         allow_origins=["*"],
