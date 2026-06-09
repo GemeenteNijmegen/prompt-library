@@ -205,10 +205,32 @@ Expected: a JSON-RPC result with a `content[0].text` containing the gallery's pa
 
 The `search_prompts` tool will appear in the tools list. Call it with a `query` argument to verify the full round-trip.
 
+### OAuth discovery
+
+The sidecar is a spec-compliant OAuth resource server. An OAuth-capable MCP client can discover the Keycloak realm automatically:
+
+```bash
+curl -s http://localhost:8001/.well-known/oauth-protected-resource | jq .
+# {
+#   "resource": "http://localhost:8001",
+#   "authorization_servers": ["http://localhost:8080/realms/nijmegen"],
+#   "bearer_methods_supported": ["header"]
+# }
+```
+
+A request with a missing or gallery-rejected token returns `401` with a `WWW-Authenticate` header pointing at this document, so the client knows where to start the authorization-code + PKCE flow.
+
+Configure the two new environment variables (or `.env`) to match your deployment:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `MCP_RESOURCE_URL` | `http://localhost:8001` | Public URL of this sidecar — used as the `resource` identifier |
+| `KEYCLOAK_REALM_URL` | `http://localhost:8080/realms/nijmegen` | Advertised authorization server |
+
 ### Running MCP unit tests
 
 ```bash
-pytest tests/test_mcp_search_prompts.py -v
+pytest tests/test_mcp_search_prompts.py tests/test_mcp_oauth_discovery.py -v
 ```
 
 These tests stub the gallery HTTP call with `respx` and run without a live stack.
