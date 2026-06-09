@@ -198,12 +198,53 @@ Expected: a JSON-RPC result with a `content[0].text` containing the gallery's pa
 
 ### Connect MCP Inspector
 
-1. Open [MCP Inspector](https://github.com/modelcontextprotocol/inspector) in a browser.
-2. Transport: **Streamable HTTP**
-3. URL: `http://localhost:8001/mcp`
-4. Add header `Authorization: Bearer <token from dev_token.py>`
+[MCP Inspector](https://github.com/modelcontextprotocol/inspector) supports two modes.
 
-The `search_prompts` tool will appear in the tools list. Call it with a `query` argument to verify the full round-trip.
+#### Option A — HS256 stub token (no Keycloak needed)
+
+Start the gallery in dev/stub-auth mode (`JWKS_URI` empty, `JWT_SECRET_KEY` set):
+
+```bash
+npx @modelcontextprotocol/inspector
+```
+
+In Inspector:
+1. Transport: **Streamable HTTP**, URL: `http://localhost:8001/mcp`
+2. Add header `Authorization: Bearer <token from dev_token.py>`
+
+#### Option B — Full OAuth flow with local Keycloak
+
+Start the full stack with Keycloak:
+
+```bash
+docker compose --profile full --profile keycloak up --build -d
+```
+
+Run Inspector:
+
+```bash
+npx @modelcontextprotocol/inspector
+```
+
+Inspector discovers the Keycloak realm automatically via
+`/.well-known/oauth-protected-resource` and redirects you through the
+authorization-code + PKCE flow. When Keycloak's login page appears, use
+any gallery-realm user — **not** the Keycloak admin account:
+
+| username | password | org |
+|----------|----------|-----|
+| `alice`  | `dev`    | org-a |
+| `bob`    | `dev`    | org-b |
+| `carol`  | `dev`    | org-b |
+| `dave`   | `dev`    | — |
+
+> The `mcp-inspector` client is pre-registered in `keycloak/realm-export.json`
+> as a public client (`publicClient: true`, redirect URI `http://localhost:6274/*`).
+> No client secret is required. Inspector's DCR attempt will fail (open registration
+> is disabled), but the pre-registered client makes the auth-code flow work.
+
+After login the tool list appears. Call `search_prompts` to verify the full
+chat-client → MCP sidecar → gallery round-trip.
 
 ### OAuth discovery
 
@@ -225,7 +266,7 @@ Configure the two new environment variables (or `.env`) to match your deployment
 | Variable | Default | Purpose |
 |---|---|---|
 | `MCP_RESOURCE_URL` | `http://localhost:8001` | Public URL of this sidecar — used as the `resource` identifier |
-| `KEYCLOAK_REALM_URL` | `http://localhost:8080/realms/nijmegen` | Advertised authorization server |
+| `KEYCLOAK_REALM_URL` | `http://localhost:8080/realms/gallery` | Advertised authorization server |
 
 ### Running MCP unit tests
 
