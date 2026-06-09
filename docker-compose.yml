@@ -1,13 +1,13 @@
 # Profiles:
-#   full       – Postgres 18 + Redis 7 + app, built image  [default]
-#   dev        – same infrastructure + src volume + --reload
+#   full       – Postgres 18 + Redis 7 + app + mcp, built images  [default]
+#   dev        – same infrastructure + src volumes + --reload + mcp-dev
 #   simple     – app only, SQLite, no external services
 #   embeddings – full stack using app-with-embeddings image (real ML model bundled)
 #   keycloak   – local Keycloak v26 (RS256 OIDC); combine with dev for full local SSO
 #
 # Usage:
 #   docker compose up                                       # full stack  (COMPOSE_PROFILES=full set in .env)
-#   docker compose --profile dev up                        # hot-reload
+#   docker compose --profile dev up                        # hot-reload + mcp-dev
 #   docker compose --profile dev --profile keycloak up     # hot-reload + local Keycloak
 #   docker compose --profile simple up                     # SQLite, single container
 #   docker compose --profile embeddings up                 # bundled model, real semantic search
@@ -232,6 +232,48 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+  # ── MCP sidecar: full stack (token-forwarding, crypto-free, ADR 0005) ────────
+
+  mcp:
+    profiles: [full]
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    ports:
+      - "${MCP_PORT:-8001}:8001"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      GALLERY_API_URL: http://app:8000
+      MCP_RESOURCE_URL: "${MCP_RESOURCE_URL:-http://localhost:8001}"
+      KEYCLOAK_REALM_URL: "${KEYCLOAK_REALM_URL:-http://localhost:8080/realms/gallery}"
+    depends_on:
+      app:
+        condition: service_started
+
+  # ── MCP sidecar: dev (gallery_mcp volume for live edits) ─────────────────
+
+  mcp-dev:
+    profiles: [dev]
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    ports:
+      - "${MCP_PORT:-8001}:8001"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      GALLERY_API_URL: http://app-dev:8000
+      MCP_RESOURCE_URL: "${MCP_RESOURCE_URL:-http://localhost:8001}"
+      KEYCLOAK_REALM_URL: "${KEYCLOAK_REALM_URL:-http://localhost:8080/realms/gallery}"
+    volumes:
+      - ./gallery_mcp:/app/gallery_mcp
+    depends_on:
+      app-dev:
+        condition: service_started
 
 volumes:
   postgres_data:
