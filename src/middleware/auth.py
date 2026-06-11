@@ -143,6 +143,8 @@ def _authenticate(
         raise _unauthorized("Token has expired")
     except (JWTInvalidError, Exception):
         raise _unauthorized("Invalid auth token")
+    if "sub" not in claims:
+        raise _unauthorized("Token missing required claim: sub")
     return _build_authenticated_user(claims, db)
 
 

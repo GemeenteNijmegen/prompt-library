@@ -18,6 +18,15 @@
   "revokeRefreshToken": true,
   "refreshTokenMaxReuse": 0,
   "organizationsEnabled": true,
+  "defaultDefaultClientScopes": [
+    "acr",
+    "basic",
+    "email",
+    "profile",
+    "roles",
+    "web-origins",
+    "gallery-defaults"
+  ],
   "clientScopes": [
     {
       "name": "prompt:read",
@@ -109,6 +118,52 @@
       "attributes": {
         "include.in.token.scope": "false"
       }
+    },
+    {
+      "name": "gallery-defaults",
+      "description": "Claims required by the Gallery API — assigned to all clients including DCR",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "sub",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-sub-mapper",
+          "consentRequired": false,
+          "config": {
+            "access.token.claim": "true",
+            "id.token.claim": "true"
+          }
+        },
+        {
+          "name": "gallery-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "prompt-gallery-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        },
+        {
+          "name": "realm-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "multivalued": "true",
+            "userinfo.token.claim": "false",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String"
+          }
+        }
+      ]
     }
   ],
   "roles": {
@@ -514,6 +569,88 @@
       ],
       "webOrigins": [
         "http://localhost:6274"
+      ],
+      "defaultClientScopes": [
+        "openid",
+        "profile",
+        "email"
+      ],
+      "optionalClientScopes": [
+        "prompt:read",
+        "prompt:read:restricted",
+        "prompt:create",
+        "prompt:write",
+        "prompt:publish",
+        "prompt:publish:public",
+        "prompt:rate",
+        "prompt:image",
+        "prompt:moderate",
+        "apikey:create",
+        "admin:manage_taxonomy",
+        "admin:manage_users",
+        "admin:read_audit"
+      ],
+      "protocolMappers": [
+        {
+          "name": "gallery-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "prompt-gallery-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        },
+        {
+          "name": "sub",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-sub-mapper",
+          "consentRequired": false,
+          "config": {
+            "access.token.claim": "true",
+            "id.token.claim": "true"
+          }
+        },
+        {
+          "name": "realm-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "multivalued": "true",
+            "userinfo.token.claim": "false",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "name": "email",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "email",
+            "claim.name": "email",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "full name",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-full-name-mapper",
+          "consentRequired": false,
+          "config": {
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
       ]
     }
   ],
@@ -598,7 +735,8 @@
         "apikey:create",
         "admin:manage_taxonomy",
         "admin:manage_users",
-        "admin:read_audit"
+        "admin:read_audit",
+        "offline_access"
       ],
       "credentials": [
         {
@@ -625,7 +763,8 @@
         "prompt:write",
         "prompt:rate",
         "prompt:image",
-        "prompt:publish"
+        "prompt:publish",
+        "offline_access"
       ],
       "attributes": {
         "org_id": [
@@ -650,7 +789,8 @@
       "emailVerified": true,
       "realmRoles": [
         "prompt:read",
-        "apikey:create"
+        "apikey:create",
+        "offline_access"
       ],
       "attributes": {
         "org_id": [
@@ -681,7 +821,8 @@
         "prompt:write",
         "prompt:rate",
         "prompt:image",
-        "prompt:publish"
+        "prompt:publish",
+        "offline_access"
       ],
       "attributes": {
         "org_id": [
@@ -717,7 +858,8 @@
         "apikey:create",
         "admin:manage_taxonomy",
         "admin:manage_users",
-        "admin:read_audit"
+        "admin:read_audit",
+        "offline_access"
       ],
       "groups": [
         "/gallery-ops"
