@@ -10,6 +10,13 @@ from src.schemas.rating import RatingSubmit
 from src.services import prompt_service
 from src.services.audit_service import write_event
 from src.utils.error import NotFoundError, ConflictError, ForbiddenError, EmbedError
+from src.utils.openapi_responses import (
+    UNAUTHORIZED,
+    FORBIDDEN,
+    NOT_FOUND,
+    CONFLICT,
+    OPTIONAL_AUTH,
+)
 
 router = APIRouter(tags=["prompts"])
 
@@ -37,7 +44,7 @@ def _handle(exc: NotFoundError | ConflictError | ForbiddenError | EmbedError):
 
 # ── Featured must come before /{id} ──────────────────────────────────────────
 
-@router.get("/prompts/featured", response_model=dict)
+@router.get("/prompts/featured", response_model=dict, openapi_extra=OPTIONAL_AUTH)
 def list_featured(db: Session = Depends(get_db), caller=Depends(get_optional_user)):
     cache_key = f"{_FEATURED_CACHE_KEY}:{'auth' if caller else 'anon'}"
     cached = cache_get(cache_key)
@@ -52,7 +59,7 @@ def list_featured(db: Session = Depends(get_db), caller=Depends(get_optional_use
 
 # ── Prompts CRUD ──────────────────────────────────────────────────────────────
 
-@router.get("/prompts", response_model=dict)
+@router.get("/prompts", response_model=dict, openapi_extra=OPTIONAL_AUTH)
 def list_prompts(
     db: Session = Depends(get_db),
     caller=Depends(get_optional_user),
@@ -94,7 +101,7 @@ def list_prompts(
     }
 
 
-@router.get("/prompts/{prompt_id}", response_model=dict)
+@router.get("/prompts/{prompt_id}", response_model=dict, responses=NOT_FOUND, openapi_extra=OPTIONAL_AUTH)
 def get_prompt(prompt_id: int, db: Session = Depends(get_db), caller=Depends(get_optional_user)):
     try:
         p = prompt_service.get_prompt(db, prompt_id, caller)
@@ -104,7 +111,12 @@ def get_prompt(prompt_id: int, db: Session = Depends(get_db), caller=Depends(get
         _handle(e)
 
 
-@router.post("/prompts", status_code=status.HTTP_201_CREATED, response_model=dict)
+@router.post(
+    "/prompts",
+    status_code=status.HTTP_201_CREATED,
+    response_model=dict,
+    responses={**UNAUTHORIZED, **FORBIDDEN, **NOT_FOUND, **CONFLICT},
+)
 def create_prompt(
     data: PromptCreate,
     db: Session = Depends(get_db),
@@ -121,7 +133,11 @@ def create_prompt(
         _handle(e)
 
 
-@router.patch("/prompts/{prompt_id}", response_model=dict)
+@router.patch(
+    "/prompts/{prompt_id}",
+    response_model=dict,
+    responses={**UNAUTHORIZED, **FORBIDDEN, **NOT_FOUND, **CONFLICT},
+)
 def update_prompt(
     prompt_id: int,
     data: PromptUpdate,
@@ -140,7 +156,11 @@ def update_prompt(
         _handle(e)
 
 
-@router.delete("/prompts/{prompt_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/prompts/{prompt_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={**UNAUTHORIZED, **FORBIDDEN, **NOT_FOUND},
+)
 def delete_prompt(
     prompt_id: int,
     db: Session = Depends(get_db),
@@ -155,7 +175,11 @@ def delete_prompt(
         _handle(e)
 
 
-@router.post("/prompts/{prompt_id}/use", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/prompts/{prompt_id}/use",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses=NOT_FOUND,
+)
 def use_prompt(prompt_id: int, db: Session = Depends(get_db)):
     try:
         prompt_service.increment_use_count(db, prompt_id)
@@ -165,7 +189,11 @@ def use_prompt(prompt_id: int, db: Session = Depends(get_db)):
 
 # ── Ratings ───────────────────────────────────────────────────────────────────
 
-@router.post("/prompts/{prompt_id}/rate", response_model=dict)
+@router.post(
+    "/prompts/{prompt_id}/rate",
+    response_model=dict,
+    responses={**UNAUTHORIZED, **FORBIDDEN, **NOT_FOUND},
+)
 def submit_rating(
     prompt_id: int,
     data: RatingSubmit,
@@ -182,7 +210,11 @@ def submit_rating(
         _handle(e)
 
 
-@router.get("/prompts/{prompt_id}/rate", response_model=dict)
+@router.get(
+    "/prompts/{prompt_id}/rate",
+    response_model=dict,
+    responses={**UNAUTHORIZED, **FORBIDDEN, **NOT_FOUND},
+)
 def get_user_rating(
     prompt_id: int,
     db: Session = Depends(get_db),
@@ -197,7 +229,7 @@ def get_user_rating(
         _handle(e)
 
 
-@router.get("/prompts/{prompt_id}/ratings", response_model=dict)
+@router.get("/prompts/{prompt_id}/ratings", response_model=dict, responses=NOT_FOUND)
 def get_rating_stats(prompt_id: int, db: Session = Depends(get_db)):
     try:
         stats = prompt_service.get_rating_stats(db, prompt_id)

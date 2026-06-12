@@ -32,6 +32,12 @@ testpaths = ["tests"]
 markers = [
     "smoke: live-stack integration tests (require KEYCLOAK_URL and GALLERY_API_URL)",
 ]
+filterwarnings = [
+    # Starlette's TestClient warns that httpx support is deprecated in favour of
+    # an unreleased `httpx2`. There is nothing to migrate to yet and httpx is a
+    # transitive dependency we don't control here, so silence this one warning.
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated",
+]
 
 [tool.coverage.run]
 source = ["src"]

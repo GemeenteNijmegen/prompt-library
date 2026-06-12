@@ -7,6 +7,7 @@ from src.schemas.tag import TagCreate, TagDetail
 from src.services import taxonomy_service
 from src.services.audit_service import write_event
 from src.utils.error import NotFoundError, ConflictError
+from src.utils.openapi_responses import UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT
 
 router = APIRouter(tags=["tags"])
 
@@ -29,7 +30,7 @@ def list_tags(db: Session = Depends(get_db)):
     return {"data": tags}
 
 
-@router.get("/tags/{tag_id}", response_model=dict)
+@router.get("/tags/{tag_id}", response_model=dict, responses=NOT_FOUND)
 def get_tag(tag_id: int, db: Session = Depends(get_db)):
     try:
         return {"data": taxonomy_service.get_tag(db, tag_id)}
@@ -37,7 +38,12 @@ def get_tag(tag_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail={"error": {"code": e.code, "message": e.message}})
 
 
-@router.post("/tags", status_code=status.HTTP_201_CREATED, response_model=dict)
+@router.post(
+    "/tags",
+    status_code=status.HTTP_201_CREATED,
+    response_model=dict,
+    responses={**UNAUTHORIZED, **FORBIDDEN, **CONFLICT},
+)
 def create_tag(data: TagCreate, db: Session = Depends(get_db), user=Depends(_require_taxonomy)):
     try:
         tag = taxonomy_service.create_tag(db, data)
@@ -48,7 +54,11 @@ def create_tag(data: TagCreate, db: Session = Depends(get_db), user=Depends(_req
         raise HTTPException(status_code=409, detail={"error": {"code": e.code, "message": e.message}})
 
 
-@router.delete("/tags/{tag_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/tags/{tag_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={**UNAUTHORIZED, **FORBIDDEN, **NOT_FOUND},
+)
 def delete_tag(tag_id: int, db: Session = Depends(get_db), user=Depends(_require_taxonomy)):
     try:
         taxonomy_service.soft_delete_tag(db, tag_id)

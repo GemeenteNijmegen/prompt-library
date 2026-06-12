@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from src.dependencies import get_current_user, get_db
 from src.models.prompt_event import PromptEvent
+from src.utils.openapi_responses import UNAUTHORIZED, FORBIDDEN
 
 router = APIRouter(tags=["admin"])
 
@@ -18,7 +19,7 @@ def _require_scope(scope: str):
     return dep
 
 
-@router.get("/admin/audit")
+@router.get("/admin/audit", responses={**UNAUTHORIZED, **FORBIDDEN})
 def list_audit_events(
     entity_type: str | None = Query(None),
     entity_id: str | None = Query(None),

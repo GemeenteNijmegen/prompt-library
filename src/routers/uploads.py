@@ -7,6 +7,7 @@ from src.middleware.auth import get_current_user, AuthenticatedUser
 from src.services.audit_service import write_event
 from src.storage import get_storage_backend
 from src.storage.base import StorageBackend
+from src.utils.openapi_responses import UNAUTHORIZED, FORBIDDEN, NOT_FOUND
 
 router = APIRouter(tags=["uploads"])
 
@@ -22,7 +23,7 @@ def _require_scope(scope: str):
     return dep
 
 
-@router.post("/uploads/images", status_code=201)
+@router.post("/uploads/images", status_code=201, responses={**UNAUTHORIZED, **FORBIDDEN})
 async def upload_image(
     file: UploadFile = File(...),
     backend: StorageBackend = Depends(get_storage_backend),
@@ -32,7 +33,7 @@ async def upload_image(
     content = await file.read()
     if len(content) > settings.MAX_UPLOAD_SIZE:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail={"error": {"code": "PAYLOAD_TOO_LARGE", "message": "File exceeds maximum upload size"}},
         )
     result = await backend.upload(
@@ -44,7 +45,11 @@ async def upload_image(
     return {"data": result}
 
 
-@router.delete("/uploads/images/{key:path}", status_code=204)
+@router.delete(
+    "/uploads/images/{key:path}",
+    status_code=204,
+    responses={**UNAUTHORIZED, **FORBIDDEN, **NOT_FOUND},
+)
 async def delete_image(
     key: str,
     backend: StorageBackend = Depends(get_storage_backend),
