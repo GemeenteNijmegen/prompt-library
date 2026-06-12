@@ -75,12 +75,25 @@ def _upsert_user(db: Session, claims: dict) -> User:
 
 
 def _resolve_scope(claims: dict) -> list[str]:
-    """Permissions are carried as Keycloak realm roles (RFC 9068 ``roles``) in
-    ``realm_access.roles``; the granular role names double as permission scopes.
-    Composite role names (e.g. ``publisher``) come along harmlessly and are
-    simply not matched by any ``has_scope`` check."""
-    realm_access = claims.get("realm_access") or {}
-    return list(realm_access.get("roles") or [])
+    """Extract scopes from the token.
+
+    Keycloak production tokens carry permissions as realm roles in
+    ``realm_access.roles`` and are checked first.  Standard OAuth2 tokens
+    (and HS256 dev tokens) carry them in the ``scope`` claim, either as a
+    space-separated string or a JSON array.  The two formats are mutually
+    exclusive: when ``realm_access.roles`` is present it is used exclusively
+    to avoid accidentally admitting OIDC scopes (``openid``, ``profile``, …)
+    that a Keycloak token also places in the ``scope`` string."""
+    realm_roles = ((claims.get("realm_access") or {}).get("roles") or [])
+    if realm_roles:
+        return list(realm_roles)
+
+    scope = claims.get("scope")
+    if isinstance(scope, list):
+        return scope
+    if isinstance(scope, str):
+        return scope.split()
+    return []
 
 
 def _build_authenticated_user(claims: dict, db: Session) -> "AuthenticatedUser":
