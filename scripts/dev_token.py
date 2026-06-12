@@ -47,7 +47,7 @@ def main():
         "sub": args.sub,
         "org_id": args.org_id,
         "azp": args.azp,
-        "scope": args.scope,
+        "realm_access": {"roles": args.scope},
         "iss": settings.JWT_ISSUER or "http://localhost:9000",
         "aud": settings.JWT_AUDIENCE,
         "name": "Dev User",
