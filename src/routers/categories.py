@@ -8,6 +8,7 @@ from src.schemas.common import DataResponse, PaginatedResponse, ActionResponse
 from src.services import taxonomy_service
 from src.services.audit_service import write_event
 from src.utils.error import NotFoundError, ConflictError
+from src.utils.openapi_responses import UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT
 
 router = APIRouter(tags=["categories"])
 
@@ -30,7 +31,7 @@ def list_categories(db: Session = Depends(get_db)):
     return {"data": cats}
 
 
-@router.get("/categories/{category_id}", response_model=dict)
+@router.get("/categories/{category_id}", response_model=dict, responses=NOT_FOUND)
 def get_category(category_id: int, db: Session = Depends(get_db)):
     try:
         return {"data": taxonomy_service.get_category(db, category_id)}
@@ -38,7 +39,12 @@ def get_category(category_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail={"error": {"code": e.code, "message": e.message}})
 
 
-@router.post("/categories", status_code=status.HTTP_201_CREATED, response_model=dict)
+@router.post(
+    "/categories",
+    status_code=status.HTTP_201_CREATED,
+    response_model=dict,
+    responses={**UNAUTHORIZED, **FORBIDDEN, **CONFLICT},
+)
 def create_category(data: CategoryCreate, db: Session = Depends(get_db), user=Depends(_require_taxonomy)):
     try:
         cat = taxonomy_service.create_category(db, data)
@@ -49,7 +55,11 @@ def create_category(data: CategoryCreate, db: Session = Depends(get_db), user=De
         raise HTTPException(status_code=409, detail={"error": {"code": e.code, "message": e.message}})
 
 
-@router.patch("/categories/{category_id}", response_model=dict)
+@router.patch(
+    "/categories/{category_id}",
+    response_model=dict,
+    responses={**UNAUTHORIZED, **FORBIDDEN, **NOT_FOUND, **CONFLICT},
+)
 def update_category(category_id: int, data: CategoryUpdate, db: Session = Depends(get_db), user=Depends(_require_taxonomy)):
     try:
         cat = taxonomy_service.update_category(db, category_id, data)
@@ -62,7 +72,11 @@ def update_category(category_id: int, data: CategoryUpdate, db: Session = Depend
         raise HTTPException(status_code=409, detail={"error": {"code": e.code, "message": e.message}})
 
 
-@router.delete("/categories/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/categories/{category_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={**UNAUTHORIZED, **FORBIDDEN, **NOT_FOUND},
+)
 def delete_category(category_id: int, db: Session = Depends(get_db), user=Depends(_require_taxonomy)):
     try:
         taxonomy_service.soft_delete_category(db, category_id)

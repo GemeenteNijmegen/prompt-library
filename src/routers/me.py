@@ -11,6 +11,7 @@ from src.schemas.user import UserProfile
 from src.services.api_key_service import DEFAULT_TTL_DAYS, generate_api_key
 from src.services.audit_service import write_event
 from src.services.keycloak_client import KeycloakClient, KeycloakError, get_keycloak_client
+from src.utils.openapi_responses import UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT
 
 _log = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ def _require_scope(scope: str):
     return dep
 
 
-@router.get("/me", response_model=dict)
+@router.get("/me", response_model=dict, responses=UNAUTHORIZED)
 def get_me(caller=Depends(get_current_user)):
     profile = UserProfile(
         id=caller.id,
@@ -41,7 +42,12 @@ def get_me(caller=Depends(get_current_user)):
     return {"data": profile.model_dump()}
 
 
-@router.post("/me/api-keys", response_model=dict, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/me/api-keys",
+    response_model=dict,
+    status_code=status.HTTP_201_CREATED,
+    responses={**UNAUTHORIZED, **FORBIDDEN},
+)
 def create_api_key(
     body: ApiKeyCreate,
     caller=Depends(_require_scope("apikey:create")),
@@ -100,7 +106,7 @@ def create_api_key(
     return {"data": result.model_dump()}
 
 
-@router.get("/me/api-keys", response_model=dict)
+@router.get("/me/api-keys", response_model=dict, responses=UNAUTHORIZED)
 def list_api_keys(
     caller=Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -114,7 +120,11 @@ def list_api_keys(
     return {"data": [ApiKeyMetadata.model_validate(k).model_dump() for k in keys]}
 
 
-@router.post("/me/logout-everywhere", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/me/logout-everywhere",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses=UNAUTHORIZED,
+)
 def logout_everywhere(
     caller=Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -162,7 +172,11 @@ def logout_everywhere(
     )
 
 
-@router.delete("/me/api-keys/{key_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/me/api-keys/{key_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={**UNAUTHORIZED, **NOT_FOUND, **CONFLICT},
+)
 def revoke_api_key(
     key_id: int,
     caller=Depends(get_current_user),

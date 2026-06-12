@@ -3,12 +3,14 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 
 from src.config import settings
 from src.database import init_db
 from src.middleware.rate_limit import RateLimitMiddleware
 from src.middleware.request_id import RequestIDMiddleware
 from src.routers import health, categories, tags, prompts, me, uploads, admin
+from src.utils.openapi_responses import OPTIONAL_AUTH_MARKER
 
 logging.basicConfig(
     level=settings.LOG_LEVEL.upper(),
@@ -16,6 +18,34 @@ logging.basicConfig(
 )
 logging.getLogger("sqlalchemy").propagate = False
 logger = logging.getLogger(__name__)
+
+
+def _install_openapi(app: FastAPI) -> None:
+    """Wrap ``app.openapi`` to express optional authentication.
+
+    Routes that accept but do not require a token are tagged with
+    ``OPTIONAL_AUTH_MARKER`` via ``openapi_extra``. FastAPI would otherwise
+    render them as requiring a bearer token (identical to mandatory-auth
+    routes), so here we rewrite their security to ``[{}, {"HTTPBearer": []}]`` —
+    the empty object signalling that anonymous access is allowed.
+    """
+
+    def openapi():
+        if app.openapi_schema:
+            return app.openapi_schema
+        schema = get_openapi(
+            title=app.title,
+            version=app.version,
+            routes=app.routes,
+        )
+        for path_item in schema.get("paths", {}).values():
+            for operation in path_item.values():
+                if isinstance(operation, dict) and operation.pop(OPTIONAL_AUTH_MARKER, None):
+                    operation["security"] = [{}, {"HTTPBearer": []}]
+        app.openapi_schema = schema
+        return schema
+
+    app.openapi = openapi
 
 
 @asynccontextmanager
@@ -66,6 +96,8 @@ def create_app(
     app.include_router(me.router, prefix=prefix)
     app.include_router(uploads.router, prefix=prefix)
     app.include_router(admin.router, prefix=prefix)
+
+    _install_openapi(app)
 
     return app
 
