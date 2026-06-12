@@ -6,8 +6,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    # Database
+    # Database — set DATABASE_URL directly, or supply the four parts and it is
+    # assembled via SQLAlchemy URL.create() (which handles all special characters).
     DATABASE_URL: str = "sqlite:///data/gallery.db"
+    DATABASE_HOST: str = ""
+    DATABASE_PORT: int = 5432
+    DATABASE_USERNAME: str = ""
+    DATABASE_PASSWORD: str = ""
+    DATABASE_NAME: str = ""
 
     # JWT / Auth (see ADR 0003, ADR 0004).
     # For Keycloak:
@@ -68,6 +74,20 @@ class Settings(BaseSettings):
 
     def cors_origins_list(self) -> list[str]:
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
+
+    @model_validator(mode="after")
+    def _build_database_url(self) -> "Settings":
+        if self.DATABASE_HOST:
+            from sqlalchemy.engine.url import URL
+            self.DATABASE_URL = URL.create(
+                "postgresql+psycopg2",
+                username=self.DATABASE_USERNAME,
+                password=self.DATABASE_PASSWORD,
+                host=self.DATABASE_HOST,
+                port=self.DATABASE_PORT,
+                database=self.DATABASE_NAME,
+            ).render_as_string(hide_password=False)
+        return self
 
     @model_validator(mode="after")
     def _require_idp_in_production(self) -> "Settings":
