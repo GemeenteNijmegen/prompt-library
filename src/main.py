@@ -36,6 +36,7 @@ def _install_openapi(app: FastAPI) -> None:
         schema = get_openapi(
             title=app.title,
             version=app.version,
+            description=app.description,
             routes=app.routes,
         )
         for path_item in schema.get("paths", {}).values():
@@ -65,6 +66,15 @@ def create_app(
     app = FastAPI(
         title="Prompt Gallery API",
         version="0.1.0",
+        description=(
+            "The Prompt Gallery API provides access to a curated library of reusable LLM prompts. "
+            "Prompts are organised by category and tag, carry a visibility state "
+            "(draft / published_org / published_public), and can be rated and featured. "
+            "Authentication uses OAuth 2.0 bearer tokens issued by Keycloak or pg_… API keys. "
+            "Row-level visibility is enforced on every read endpoint: anonymous callers see only "
+            "published_public prompts; authenticated callers also see their organisation's "
+            "published_org prompts and their own drafts."
+        ),
         docs_url="/docs",
         redoc_url="/redoc",
         lifespan=lifespan,

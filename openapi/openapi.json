@@ -2,6 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Prompt Gallery API",
+    "description": "The Prompt Gallery API provides access to a curated library of reusable LLM prompts. Prompts are organised by category and tag, carry a visibility state (draft / published_org / published_public), and can be rated and featured. Authentication uses OAuth 2.0 bearer tokens issued by Keycloak or pg_\u2026 API keys. Row-level visibility is enforced on every read endpoint: anonymous callers see only published_public prompts; authenticated callers also see their organisation's published_org prompts and their own drafts.",
     "version": "0.1.0"
   },
   "paths": {
@@ -11,6 +12,7 @@
           "infrastructure"
         ],
         "summary": "Health Check",
+        "description": "Check service availability. Returns 200 with version info when the API and database are reachable; 503 when the database is down. No authentication required.",
         "operationId": "health_check_api_v1_health_get",
         "responses": {
           "200": {
@@ -30,6 +32,7 @@
           "categories"
         ],
         "summary": "List Categories",
+        "description": "Return all prompt categories. Use the returned IDs with the `category_id` filter on list_prompts. No authentication required.",
         "operationId": "list_categories_api_v1_categories_get",
         "responses": {
           "200": {
@@ -51,6 +54,7 @@
           "categories"
         ],
         "summary": "Create Category",
+        "description": "Create a new prompt category. Requires the `admin:manage_taxonomy` scope.",
         "operationId": "create_category_api_v1_categories_post",
         "requestBody": {
           "content": {
@@ -129,6 +133,7 @@
           "categories"
         ],
         "summary": "Get Category",
+        "description": "Fetch a single category by ID.",
         "operationId": "get_category_api_v1_categories__category_id__get",
         "parameters": [
           {
@@ -181,6 +186,7 @@
           "categories"
         ],
         "summary": "Update Category",
+        "description": "Update a category's name or description. Requires the `admin:manage_taxonomy` scope.",
         "operationId": "update_category_api_v1_categories__category_id__patch",
         "security": [
           {
@@ -278,6 +284,7 @@
           "categories"
         ],
         "summary": "Delete Category",
+        "description": "Soft-delete a category. Prompts in this category are not deleted. Requires the `admin:manage_taxonomy` scope.",
         "operationId": "delete_category_api_v1_categories__category_id__delete",
         "security": [
           {
@@ -348,6 +355,7 @@
           "tags"
         ],
         "summary": "List Tags",
+        "description": "Return all tags. Use the returned tag names with the `tag` filter on list_prompts. No authentication required.",
         "operationId": "list_tags_api_v1_tags_get",
         "responses": {
           "200": {
@@ -369,6 +377,7 @@
           "tags"
         ],
         "summary": "Create Tag",
+        "description": "Create a new tag. Requires the `admin:manage_taxonomy` scope.",
         "operationId": "create_tag_api_v1_tags_post",
         "requestBody": {
           "content": {
@@ -447,6 +456,7 @@
           "tags"
         ],
         "summary": "Get Tag",
+        "description": "Fetch a single tag by ID.",
         "operationId": "get_tag_api_v1_tags__tag_id__get",
         "parameters": [
           {
@@ -499,6 +509,7 @@
           "tags"
         ],
         "summary": "Delete Tag",
+        "description": "Soft-delete a tag. Prompts with this tag are not deleted. Requires the `admin:manage_taxonomy` scope.",
         "operationId": "delete_tag_api_v1_tags__tag_id__delete",
         "security": [
           {
@@ -569,6 +580,7 @@
           "prompts"
         ],
         "summary": "List Featured",
+        "description": "Return the curated list of featured prompts. Authentication is optional; row-level visibility applies (anonymous callers see only published_public prompts).",
         "operationId": "list_featured_api_v1_prompts_featured_get",
         "responses": {
           "200": {
@@ -598,6 +610,7 @@
           "prompts"
         ],
         "summary": "List Prompts",
+        "description": "List prompts with optional filtering and pagination. Supports full-text search, filtering by status, visibility, category, and tags. Row-level visibility applies: anonymous callers see only published_public prompts; authenticated callers also see their organisation's published_org prompts and their own drafts.",
         "operationId": "list_prompts_api_v1_prompts_get",
         "security": [
           {},
@@ -775,6 +788,7 @@
           "prompts"
         ],
         "summary": "Create Prompt",
+        "description": "Create a new prompt in draft status. Requires the `prompt:create` scope.",
         "operationId": "create_prompt_api_v1_prompts_post",
         "security": [
           {
@@ -863,6 +877,7 @@
           "prompts"
         ],
         "summary": "Get Prompt",
+        "description": "Fetch full details for a single prompt including prompt_text and example_output. Authentication is optional; row-level visibility applies.",
         "operationId": "get_prompt_api_v1_prompts__prompt_id__get",
         "security": [
           {},
@@ -921,6 +936,7 @@
           "prompts"
         ],
         "summary": "Update Prompt",
+        "description": "Update a prompt's fields or advance its visibility status. Authors may edit their own prompts. Status transitions: draft \u2192 published_org requires `prompt:publish`; published_org \u2192 published_public requires `prompt:publish:public` (Gallery Operators only).",
         "operationId": "update_prompt_api_v1_prompts__prompt_id__patch",
         "security": [
           {
@@ -1018,6 +1034,7 @@
           "prompts"
         ],
         "summary": "Delete Prompt",
+        "description": "Delete a prompt. Authors and Organisation Admins may delete prompts within their organisation.",
         "operationId": "delete_prompt_api_v1_prompts__prompt_id__delete",
         "security": [
           {
@@ -1088,6 +1105,7 @@
           "prompts"
         ],
         "summary": "Use Prompt",
+        "description": "Increment the use count for a prompt. Call this when a prompt is applied or copied by a user. No authentication required.",
         "operationId": "use_prompt_api_v1_prompts__prompt_id__use_post",
         "parameters": [
           {
@@ -1133,6 +1151,7 @@
           "prompts"
         ],
         "summary": "Submit Rating",
+        "description": "Submit or update a rating (1\u20135) for a prompt. Requires the `prompt:rate` scope.",
         "operationId": "submit_rating_api_v1_prompts__prompt_id__rate_post",
         "security": [
           {
@@ -1220,6 +1239,7 @@
           "prompts"
         ],
         "summary": "Get User Rating",
+        "description": "Retrieve the current user's rating for a prompt. Requires the `prompt:rate` scope.",
         "operationId": "get_user_rating_api_v1_prompts__prompt_id__rate_get",
         "security": [
           {
@@ -1299,6 +1319,7 @@
           "prompts"
         ],
         "summary": "Get Rating Stats",
+        "description": "Retrieve aggregate rating statistics (average score, total count) for a prompt. No authentication required.",
         "operationId": "get_rating_stats_api_v1_prompts__prompt_id__ratings_get",
         "parameters": [
           {
@@ -1353,6 +1374,7 @@
           "me"
         ],
         "summary": "Get Me",
+        "description": "Return the authenticated caller's profile (id, name, email, avatar_url). Requires a valid bearer token or API key.",
         "operationId": "get_me_api_v1_me_get",
         "responses": {
           "200": {
@@ -1391,6 +1413,7 @@
           "me"
         ],
         "summary": "List Api Keys",
+        "description": "List all active (non-revoked) API keys for the authenticated caller.",
         "operationId": "list_api_keys_api_v1_me_api_keys_get",
         "responses": {
           "200": {
@@ -1427,6 +1450,7 @@
           "me"
         ],
         "summary": "Create Api Key",
+        "description": "Issue a new API key for the authenticated caller. The raw token is returned only in this response \u2014 store it securely. Requires the `apikey:create` scope and an interactive OAuth session (existing API keys cannot mint new ones).",
         "operationId": "create_api_key_api_v1_me_api_keys_post",
         "requestBody": {
           "content": {
@@ -1495,6 +1519,7 @@
           "me"
         ],
         "summary": "Logout Everywhere",
+        "description": "Revoke all active Keycloak SSO sessions and API keys for the authenticated caller. Use this when a credential may have been compromised.",
         "operationId": "logout_everywhere_api_v1_me_logout_everywhere_post",
         "responses": {
           "204": {
@@ -1524,6 +1549,7 @@
           "me"
         ],
         "summary": "Revoke Api Key",
+        "description": "Revoke a specific API key by ID. The key is immediately invalidated.",
         "operationId": "revoke_api_key_api_v1_me_api_keys__key_id__delete",
         "security": [
           {
@@ -1594,6 +1620,7 @@
           "uploads"
         ],
         "summary": "Upload Image",
+        "description": "Upload an image for use in a prompt (e.g. a cover image). Returns a URL and storage key. Requires the `prompt:image` scope.",
         "operationId": "upload_image_api_v1_uploads_images_post",
         "requestBody": {
           "content": {
@@ -1658,6 +1685,7 @@
           "uploads"
         ],
         "summary": "Delete Image",
+        "description": "Delete a previously uploaded image by its storage key. Requires the `prompt:image` scope.",
         "operationId": "delete_image_api_v1_uploads_images__key__delete",
         "security": [
           {
@@ -1728,6 +1756,7 @@
           "admin"
         ],
         "summary": "List Audit Events",
+        "description": "Return a paginated audit log of gallery actions (prompt created/updated/deleted, API keys issued/revoked, etc.). Filterable by entity_type and entity_id. Requires the `admin:read_audit` scope.",
         "operationId": "list_audit_events_api_v1_admin_audit_get",
         "security": [
           {

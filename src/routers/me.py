@@ -31,6 +31,7 @@ def _require_scope(scope: str):
 
 @router.get("/me", response_model=dict, responses=UNAUTHORIZED)
 def get_me(caller=Depends(get_current_user)):
+    """Return the authenticated caller's profile (id, name, email, avatar_url). Requires a valid bearer token or API key."""
     profile = UserProfile(
         id=caller.id,
         external_id=caller.external_id,
@@ -53,6 +54,7 @@ def create_api_key(
     caller=Depends(_require_scope("apikey:create")),
     db: Session = Depends(get_db),
 ):
+    """Issue a new API key for the authenticated caller. The raw token is returned only in this response — store it securely. Requires the `apikey:create` scope and an interactive OAuth session (existing API keys cannot mint new ones)."""
     # An API key must not be usable to mint further API keys: that would let a
     # leaked key spawn fresh credentials and survive revocation of the original.
     # Key creation requires an interactive (OAuth/JWT) session.
@@ -111,6 +113,7 @@ def list_api_keys(
     caller=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """List all active (non-revoked) API keys for the authenticated caller."""
     keys = (
         db.query(ApiKey)
         .filter(ApiKey.user_id == caller.id, ApiKey.revoked_at.is_(None))
@@ -130,6 +133,7 @@ def logout_everywhere(
     db: Session = Depends(get_db),
     kc: KeycloakClient = Depends(get_keycloak_client),
 ):
+    """Revoke all active Keycloak SSO sessions and API keys for the authenticated caller. Use this when a credential may have been compromised."""
     failures: list[str] = []
 
     # 1. Invalidate all interactive Keycloak SSO sessions for this user.
@@ -182,6 +186,7 @@ def revoke_api_key(
     caller=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """Revoke a specific API key by ID. The key is immediately invalidated."""
     key = db.query(ApiKey).filter(ApiKey.id == key_id, ApiKey.user_id == caller.id).first()
     if key is None:
         raise HTTPException(
