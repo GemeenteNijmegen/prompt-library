@@ -133,6 +133,17 @@ services:
           --uusername service-account-gallery-test-client \
           --cclientid realm-management \
           --rolename view-users || true
+        # Remove restrictive anonymous client-registration policies so OAuth
+        # clients (e.g. Claude Code MCP) can dynamically register from any host
+        # and request the realm's custom scopes.  Safe for local dev only.
+        /opt/keycloak/bin/kcadm.sh get components -r gallery \
+          -q type=org.keycloak.services.clientregistration.policy.ClientRegistrationPolicy \
+          2>/dev/null | \
+          grep '"id"' | \
+          sed 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' | \
+          while read id; do
+            /opt/keycloak/bin/kcadm.sh delete components/$$id -r gallery 2>/dev/null || true
+          done
         wait $$kc_pid
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
@@ -182,10 +193,13 @@ services:
       LOG_LEVEL: debug
       EMBEDDING_USE_FAKE: "true"
       # Keycloak integration — values mirror keycloak/realm-export.json.
-      # KEYCLOAK_URL uses the compose-internal hostname; JWT_ISSUER uses the
-      # external URL that Keycloak embeds in tokens (iss claim).
+      # KEYCLOAK_URL uses the compose-internal hostname; JWT_ISSUER/JWKS_URI use
+      # compose-internal access too so they work inside Docker regardless of what
+      # KC_HOSTNAME is set to (issuer is checked separately via JWT_ISSUER).
       KEYCLOAK_URL: http://keycloak:8080
       KEYCLOAK_REALM: gallery
+      JWT_ISSUER: http://localhost:8080/realms/gallery
+      JWKS_URI: http://keycloak:8080/realms/gallery/protocol/openid-connect/certs
       # Admin client used only for logout-everywhere (terminating interactive
       # SSO sessions). API keys are opaque gallery secrets — no Keycloak client
       # is involved in issuing them.

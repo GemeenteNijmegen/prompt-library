@@ -1,8 +1,8 @@
 # Prompt Gallery Extraction Plan
 
-> **Status:** Draft — all 54 decisions resolved
-> **Date:** 2025-05-01
-> **Context:** Extract the prompt gallery from the learning platform into a standalone REST API service, designed to be consumed by the learning platform, a future MCP server, and other clients.
+> **Status:** Implemented — reconciled with shipped code on 2026-06-09. Phases 1–5 are complete; the Keycloak auth epic ([docs/epics/0001-keycloak-auth.md](docs/epics/0001-keycloak-auth.md)) is closed and the MCP sidecar ([ADR 0005](docs/adr/0005-mcp-server-token-forwarding-sidecar.md)) has shipped. A few v1 decisions were superseded during build — chiefly opaque gallery-issued API keys replacing machine JWTs (ADR 0004 rev 2) and the four-state prompt status. Where the original decision differs from what shipped, this document reflects the **shipped** state; the original wording is preserved only in the ADR history.
+> **Date:** 2025-05-01 (original) · reconciled 2026-06-09
+> **Context:** Extract the prompt gallery from the learning platform into a standalone REST API service, designed to be consumed by the learning platform, an MCP server, and other clients.
 
 ---
 
@@ -69,7 +69,7 @@
 | 2b  | Platform references | Drop `linked_challenge_id` and `created_by_role` entirely                 | Meaningless outside platform                            |
 | 2c  | Visibility          | `public` / `internal` / `restricted` (replaces `laag`/`gemiddeld`/`hoog`) | Generic vocabulary, not tied to Dutch municipal context |
 | 2e  | Prompt review (AI)  | Drop entirely                                                             | Not core to gallery storage + retrieval                 |
-| 2f  | Semantic search     | Keyword now, `embedding_vector` placeholder (JSONB, nullable)             | Add pipeline when needed, field is ready                |
+| 2f  | Semantic search     | Shipped: hybrid ILIKE keyword + embedding cosine, fused via RRF (k=60); `embedding_vector` stored as JSON/JSONB. Model-source selection still open (#25–#27). See ARCHITECTURE.md. | No pgvector needed at current corpus size |
 | 2g  | Images              | Upload endpoints via gallery API                                          | Centralized, simple for current scale                   |
 
 ### Configuration
@@ -82,7 +82,7 @@
 | 3d  | API versioning        | `/api/v1/` path prefix                                                | Versioned from day one, easy to upgrade                       |
 | 20  | Storage backends      | LocalFileSystem (always) + S3 (optional)                              | Local for dev/test, S3 for prod portability. Skip Cloudinary. |
 | 21  | Schema naming         | Standard SQLAlchemy: plural table names, snake_case columns, `id` PKs | Conventional, readable                                        |
-| 22  | Environment variables | 17 variables (see full list below)                                    | Documented defaults for all                                   |
+| 22  | Environment variables | Documented defaults for all (see full list below)                     | Documented defaults for all                                   |
 | 18  | CORS                  | Whitelist origins (`CORS_ORIGINS` env var)                            | Explicit, secure                                              |
 
 ### Endpoint Design
@@ -152,7 +152,7 @@ admin:    + prompt:read:restricted admin:*
 ```
 page, per_page          — pagination (default: page=1, per_page=20)
 search                  — keyword (title, description, prompt_text)
-status                  — draft, published, archived
+status                  — draft, published_org, published_public, archived
 visibility              — public, internal, restricted
 featured                — true / false
 category_id             — filter by category ID
@@ -375,10 +375,17 @@ CREATE INDEX idx_prompt_events_created_at ON prompt_events(created_at);
 | `REDIS_URL`            | No         | —                           | Redis URL for optional caching layer (`cachetools.TTLCache` used otherwise). Not used for rate limiting. |
 | `LOG_LEVEL`            | No         | `info`                      | `debug`, `info`, `warning`, `error`              |
 | `ENVIRONMENT`          | No         | `development`               | `development`, `production`, `testing`           |
-| `RATE_LIMIT_ANONYMOUS` | No         | `30`                        | Requests/min for anonymous callers               |
-| `RATE_LIMIT_USER`      | No         | `120`                       | Requests/min for authenticated users             |
-| `RATE_LIMIT_MACHINE`   | No         | `300`                       | Requests/min for machine tokens                  |
+| `RATE_LIMIT_ANONYMOUS` | No         | `30`                        | Requests/min per IP for anonymous callers        |
+| `RATE_LIMIT_USER`      | No         | `120`                       | Requests/min per `sub` for authenticated users   |
+| `RATE_LIMIT_CLIENT`    | No         | `600`                       | Requests/min per `azp` (OAuth client)            |
+| `RATE_LIMIT_ORG`       | No         | `1200`                      | Requests/min per `org_id` (Organisation)         |
 | `MAX_UPLOAD_SIZE`      | No         | `5242880`                   | Max file upload size in bytes (5MB)              |
+| `KEYCLOAK_URL`         | Prod (logout) | —                        | Keycloak base URL; used only by the logout-everywhere admin call (ADR 0004). Not involved in API-key issuance/validation. |
+| `KEYCLOAK_REALM`       | No         | `prompt-gallery`            | Realm for the logout-everywhere admin call       |
+| `KEYCLOAK_ADMIN_CLIENT_ID`     | Prod (logout) | —                | Confidential admin client used to terminate a user's SSO sessions |
+| `KEYCLOAK_ADMIN_CLIENT_SECRET` | Prod (logout) | —                | Secret for `KEYCLOAK_ADMIN_CLIENT_ID`            |
+| `EMBEDDING_MODEL`      | No         | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` | Embedding model for semantic search |
+| `EMBEDDING_USE_FAKE`   | No         | `false`                     | Use a deterministic fake embedder (tests/dev)    |
 
 ### Technology Stack
 
@@ -394,12 +401,12 @@ CREATE INDEX idx_prompt_events_created_at ON prompt_events(created_at);
 | Migrations    | **Alembic**                                                      | Matches SQLAlchemy ecosystem                                                   |
 | Logging       | **JSON** (prod) / **text** (dev)                                 | Machine-parsable for pipelines, readable for dev                               |
 | Auth          | **JWT via JWKS** + HMAC dev fallback                             | Standard OIDC, configurable for dev                                            |
-| Search        | **SQL LIKE** (dev) / **PostgreSQL full-text** (prod)             | Hybrid, no extra service needed                                                |
+| Search        | **Hybrid**: ILIKE keyword + embedding cosine, fused via RRF (k=60) | Brute-force cosine over an in-process matrix cache; no pgvector at current corpus size (ADR 0001) |
 | Rate limiting | **Tiered, DB-backed**                                            | SQLite for counters, configurable limits per caller type                       |
 | Caching       | **In-memory** default, **Redis** when configured                 | `cachetools.TTLCache` for hot reads                                            |
 | Storage       | **Pluggable adapter** (Local + S3)                               | LocalFileSystem default, S3 optional                                           |
 | OpenAPI docs  | **Swagger** (`/docs`) + **ReDoc** (`/redoc`) + **static export** | Interactive for dev, static for consumers                                      |
-| CLI           | **Python script** (`scripts/generate_key.py`)                    | Bootstrap dev keys without API access                                          |
+| CLI           | **Python script** (`scripts/dev_token.py`)                       | Dev-only HS256 token minting for local `curl`; refuses to run when `ENVIRONMENT=production`. (The gallery signs no JWTs in production.) |
 
 ### Project Structure
 
@@ -413,11 +420,13 @@ prompt-gallery/
 │   │
 │   ├── models/
 │   │   ├── __init__.py           # Import all models, declarative base
-│   │   ├── user.py               # Users (profile cache)
+│   │   ├── user.py               # Users (profile cache, incl. org_id)
 │   │   ├── prompt.py             # Prompts
 │   │   ├── category.py           # PromptCategory
 │   │   ├── tag.py                # PromptTag
 │   │   ├── rating.py             # PromptRating
+│   │   ├── api_key.py            # Opaque API keys (hash + metadata)
+│   │   ├── prompt_event.py       # Audit log rows
 │   │   └── joins.py              # M2M association tables
 │   │
 │   ├── schemas/                  # Pydantic v2 request/response models
@@ -436,13 +445,17 @@ prompt-gallery/
 │   │   ├── categories.py         # /categories CRUD
 │   │   ├── tags.py               # /tags CRUD
 │   │   ├── uploads.py            # /uploads/images (upload + delete)
-│   │   ├── auth.py               # /me (profile), /auth/generate-key
+│   │   ├── me.py                 # /me (profile), /me/api-keys, /me/logout-everywhere
+│   │   ├── admin.py              # /admin (audit read — admin:read_audit)
 │   │   └── health.py             # /health
 │   │
 │   ├── services/                 # Business logic
 │   │   ├── __init__.py
-│   │   ├── prompt_service.py     # CRUD, status transitions, ratings
+│   │   ├── prompt_service.py     # CRUD, status transitions, ratings, visibility_filter
 │   │   ├── taxonomy_service.py   # Categories + tags (incl. auto-create)
+│   │   ├── api_key_service.py    # Opaque key issuance / hashing / revocation
+│   │   ├── audit_service.py      # prompt_events write hooks
+│   │   ├── keycloak_client.py    # Admin client for logout-everywhere SSO termination
 │   │   ├── search_service.py     # Search backend abstraction
 │   │   └── storage_service.py    # Storage adapter factory
 │   │
@@ -481,7 +494,7 @@ prompt-gallery/
 │   └── versions/
 │
 ├── scripts/
-│   └── generate_key.py           # CLI: generate machine JWT keys
+│   └── dev_token.py              # CLI: dev-only HS256 token minting (refuses production)
 │
 ├── openapi/                      # Generated OpenAPI spec (static export)
 │   └── openapi.json
@@ -532,11 +545,11 @@ with open('openapi/openapi.json', 'w') as f:
 
 | Feature               | Notes                                                                                                                 |
 | --------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| **Semantic search**   | `embedding_vector` column is ready. Add embedding pipeline + vector search when needed (pgvector or in-memory FAISS). |
-| **Multi-tenancy**     | Schema has no `org_id`. Add when multi-tenant need arises (affects all tables and queries).                           |
+| **Semantic search**   | Hybrid keyword + embedding search has shipped (RRF fusion). Remaining work is model-source selection — see open issues #25–#27. |
+| **Multi-tenancy**     | **Shipped.** `users.org_id` (JWT claim) threads through row-level visibility and audit. See decisions 1a/1o and CONTEXT.md.    |
 | **Webhooks / events** | Not needed now. Platform can poll. Add event bus layer when needed.                                                   |
 | **TypeScript client** | Can be auto-generated from OpenAPI spec when a consumer needs it.                                                     |
-| **MCP server**        | Can be built on top of this REST API as a thin translation layer (current `prompt_gallery_mcp.py` pattern).           |
+| **MCP server**        | **Shipped** as a token-forwarding sidecar (ADR 0005, issues #68–#71) — a thin translation layer over this REST API.   |
 | **Redis**             | Available for caching and rate limiting. Configured via `REDIS_URL`.                                                  |
 
 ### Extraction Impact on Existing Platform
@@ -570,7 +583,7 @@ Files in the learning platform that reference prompts and need to be updated aft
 - `main.py` with lifespan, router registration
 - `/health` endpoint
 - `.env.example` with all env vars + `.gitignore` for Python artifacts
-> **Decision**: No Dockerfile or docker-compose. This workspace already runs inside Docker; local install via `pip install -e .` and `uvicorn src.main:app` avoids Docker-in-Docker pitfalls. Production containerization belongs in the CI/CD pipeline.
+> **Decision (original, Phase 1)**: No Dockerfile or docker-compose — local install via `pip install -e .` and `uvicorn src.main:app` to avoid Docker-in-Docker pitfalls. **Superseded:** the repo now ships `Dockerfile` (gallery, bundling the embedding model — issue #21), `Dockerfile.mcp` + `docker-compose.yml` (MCP sidecar + profile-gated local Keycloak — ADR 0005, issues #47/#71). Local dev without containers still works as originally described.
 - Basic tests (conftest, health check)
 
 #### Phase 2: Core API — Prompts
@@ -626,18 +639,18 @@ Builds the Keycloak-facing auth surface per ADR 0003 / ADR 0004.
 
 | #     | Area                | Decision                                                           |
 | ----- | ------------------- | ------------------------------------------------------------------ |
-| 1a    | IdP                 | Not yet built — design contract only                               |
-| 1b    | Tokens              | Hybrid JWT (short-lived user, long-lived machine)                  |
+| 1a    | IdP                 | Keycloak v26+, one realm, per-Organisation Entra federation (built; ADR 0003) |
+| 1b    | Tokens              | Keycloak JWT for OAuth consumers + opaque gallery-issued API keys (ADR 0004 rev 2); gallery signs no JWTs |
 | 1c    | Roles               | Flat permission claims in JWT, no local roles                      |
 | 1m    | Data                | Fresh start, no migration                                          |
 | 2a    | Users               | Minimal profile cache, auto-upsert from JWT                        |
 | 2b    | Platform refs       | Drop entirely                                                      |
 | 2c    | Visibility          | `public` / `internal` / `restricted`                               |
 | 2e    | Prompt review       | Drop entirely                                                      |
-| 2f    | Semantic search     | Keyword now, `embedding_vector` placeholder                        |
+| 2f    | Semantic search     | Hybrid ILIKE keyword + embedding cosine, fused via RRF             |
 | 2g    | Images              | Upload via gallery API                                             |
 | 3a    | Image storage       | Pluggable: LocalFileSystem + S3                                    |
-| 3b    | Status              | English: `draft` / `published` / `archived`                        |
+| 3b    | Status              | `draft` / `published_org` / `published_public` / `archived`        |
 | 3c    | Pagination          | Offset-based                                                       |
 | 3d    | API versioning      | `/api/v1/` prefix                                                  |
 | 4a    | Status transitions  | Embedded in PATCH body                                             |
@@ -646,8 +659,8 @@ Builds the Keycloak-facing auth surface per ADR 0003 / ADR 0004.
 | 4d    | Image upload        | Through gallery API                                                |
 | 4e    | Deletion            | Soft-delete only                                                   |
 | 5a    | Permission claims   | Flat list in `scope`                                               |
-| 5b    | Permission set      | 10 permissions defined, complete                                   |
-| 5c    | API keys            | JWT-based (same mechanism)                                         |
+| 5b    | Permission set      | Scope catalogue per §Authentication Permissions (`admin:manage_keys` removed; `prompt:publish:public`, `prompt:moderate`, `apikey:create`, `admin:read_audit` added) |
+| 5c    | API keys            | Opaque gallery-issued (`pg_…`), SHA-256 hash stored — not JWTs     |
 | 5d    | JWT verification    | JWKS + HMAC dev fallback                                           |
 | 8     | Response format     | Standard `data`/`meta`/`error` envelope                            |
 | 8a    | Error codes         | HTTP status + domain-specific code                                 |
@@ -655,20 +668,20 @@ Builds the Keycloak-facing auth surface per ADR 0003 / ADR 0004.
 | 9a    | Language            | API in English, content in Dutch. All field names, error codes, and status values are English. Prompt text, titles, and descriptions may be in Dutch — the API treats them as opaque strings. |
 | 10a   | Token delivery      | `Authorization: Bearer` header only                                |
 | 10b   | Profile upsert      | Every authenticated request                                        |
-| 10c   | JWT structure       | `sub`, `scope`, `name`, `email`, `avatar_url`, `iss`, `iat`, `exp` |
-| 11a   | API keys            | JWT-signed (unified auth path)                                     |
+| 10c   | JWT structure       | `iss`, `sub`, `aud`, `azp`, `iat`, `exp`, `scope`, `org_id`, `name`, `email`, `avatar_url` |
+| 11a   | API keys            | Opaque gallery-issued keys; one authorization path, two credential front doors |
 | 11b   | Auth header         | `Authorization: Bearer` (same as users)                            |
-| 11c   | Key management      | API endpoint + CLI script                                          |
-| 11d   | Revocation          | TTL-bound + keypair rotation                                       |
+| 11c   | Key management      | `POST/GET/DELETE /me/api-keys` (no CLI; legacy `/auth/generate-key` removed) |
+| 11d   | Revocation          | Immediate DB-update revocation + 365 d TTL; interactive OAuth via refresh-replay detection + SSO termination |
 | 13    | API spec            | Complete endpoint list documented                                  |
 | 13b   | Category delete     | Soft-delete                                                        |
 | 13d-a | Image max size      | 5MB                                                                |
 | 13e   | Featured            | Respects caller permissions                                        |
 | 13g   | Profile             | Read-only from JWT claims                                          |
 | 13h   | Taxonomy assignment | Both inline and separate                                           |
-| 14    | Rate limiting       | Tiered: 30/120/300 per minute                                      |
+| 14    | Rate limiting       | Multi-axis: 30/IP · 120/`sub` · 600/`azp` · 1200/`org_id` per minute |
 | 14a   | Rate limit backend  | In-memory dev, SQLite prod                                         |
-| 15    | Search              | Hybrid LIKE + PostgreSQL full-text                                 |
+| 15    | Search              | Hybrid ILIKE keyword + embedding cosine, fused via RRF (k=60)      |
 | 16    | Logging             | JSON prod, text dev                                                |
 | 16a   | Request tracing     | `X-Request-ID` propagate                                           |
 | 17    | Caching             | In-memory default, Redis optional                                  |
@@ -677,8 +690,8 @@ Builds the Keycloak-facing auth surface per ADR 0003 / ADR 0004.
 | 19a   | TS client           | Defer                                                              |
 | 20    | Storage backends    | Local (always) + S3 (optional)                                     |
 | 21    | Schema naming       | Standard SQLAlchemy conventions                                    |
-| 22    | Env vars            | 17 variables, all documented                                       |
+| 22    | Env vars            | All documented with defaults (see §Environment Variables)          |
 | 23    | Project structure   | As documented (src/ tree)                                          |
 | 24    | Server              | Uvicorn (async-native)                                             |
 | 25    | Testing             | pytest + httpx, in-memory SQLite                                   |
-| 26    | CLI                 | Python script                                                      |
+| 26    | CLI                 | `scripts/dev_token.py` — dev-only HS256 minting; refuses production |

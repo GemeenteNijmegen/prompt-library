@@ -12,7 +12,7 @@ class McpSettings(BaseSettings):
     # /.well-known/oauth-protected-resource and in WWW-Authenticate pointers.
     MCP_RESOURCE_URL: str = "http://localhost:8001"
     # Keycloak realm URL advertised as the authorization server.
-    KEYCLOAK_REALM_URL: str = "http://localhost:8080/realms/nijmegen"
+    KEYCLOAK_REALM_URL: str = "http://localhost:8080/realms/gallery"
 
 
 settings = McpSettings()
