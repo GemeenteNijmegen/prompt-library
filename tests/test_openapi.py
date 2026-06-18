@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pytest
 
+from src.main import create_app
+
 OPENAPI_PATH = Path(__file__).parent.parent / "openapi" / "openapi.json"
 
 EXPECTED_PATHS = [
@@ -28,6 +30,16 @@ def test_openapi_json_contains_expected_paths():
     paths = spec.get("paths", {})
     for expected in EXPECTED_PATHS:
         assert expected in paths, f"Path {expected!r} not found in OpenAPI spec"
+
+
+def test_all_operations_have_descriptions():
+    spec = create_app().openapi()
+    missing = []
+    for path, methods in spec.get("paths", {}).items():
+        for method, operation in methods.items():
+            if not operation.get("description", "").strip():
+                missing.append(f"{method.upper()} {path}")
+    assert not missing, "Operations missing descriptions:\n" + "\n".join(f"  {op}" for op in missing)
 
 
 def test_cors_allowed_origin_header_present(client):

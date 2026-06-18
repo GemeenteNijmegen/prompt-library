@@ -30,6 +30,7 @@ async def upload_image(
     user: AuthenticatedUser = Depends(_require_scope("prompt:image")),
     db: Session = Depends(get_db),
 ):
+    """Upload an image for use in a prompt (e.g. a cover image). Returns a URL and storage key. Requires the `prompt:image` scope."""
     content = await file.read()
     if len(content) > settings.MAX_UPLOAD_SIZE:
         raise HTTPException(
@@ -56,6 +57,7 @@ async def delete_image(
     user: AuthenticatedUser = Depends(_require_scope("prompt:image")),
     db: Session = Depends(get_db),
 ):
+    """Delete a previously uploaded image by its storage key. Requires the `prompt:image` scope."""
     try:
         await backend.delete(key)
     except FileNotFoundError:

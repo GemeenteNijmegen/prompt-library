@@ -22,6 +22,7 @@ def _require_taxonomy(user=Depends(get_current_user)):
 
 @router.get("/tags", response_model=dict)
 def list_tags(db: Session = Depends(get_db)):
+    """Return all tags. Use the returned tag names with the `tag` filter on list_prompts. No authentication required."""
     cached = cache_get(_CACHE_KEY)
     if cached is not None:
         return {"data": cached}
@@ -32,6 +33,7 @@ def list_tags(db: Session = Depends(get_db)):
 
 @router.get("/tags/{tag_id}", response_model=dict, responses=NOT_FOUND)
 def get_tag(tag_id: int, db: Session = Depends(get_db)):
+    """Fetch a single tag by ID."""
     try:
         return {"data": taxonomy_service.get_tag(db, tag_id)}
     except NotFoundError as e:
@@ -45,6 +47,7 @@ def get_tag(tag_id: int, db: Session = Depends(get_db)):
     responses={**UNAUTHORIZED, **FORBIDDEN, **CONFLICT},
 )
 def create_tag(data: TagCreate, db: Session = Depends(get_db), user=Depends(_require_taxonomy)):
+    """Create a new tag. Requires the `admin:manage_taxonomy` scope."""
     try:
         tag = taxonomy_service.create_tag(db, data)
         write_event(db, entity_type="tag", entity_id=tag["id"], action="created", caller=user, details={"name": tag["name"]})
@@ -60,6 +63,7 @@ def create_tag(data: TagCreate, db: Session = Depends(get_db), user=Depends(_req
     responses={**UNAUTHORIZED, **FORBIDDEN, **NOT_FOUND},
 )
 def delete_tag(tag_id: int, db: Session = Depends(get_db), user=Depends(_require_taxonomy)):
+    """Soft-delete a tag. Prompts with this tag are not deleted. Requires the `admin:manage_taxonomy` scope."""
     try:
         taxonomy_service.soft_delete_tag(db, tag_id)
         write_event(db, entity_type="tag", entity_id=tag_id, action="deleted", caller=user)

@@ -27,6 +27,7 @@ def list_audit_events(
     db: Session = Depends(get_db),
     caller=Depends(_require_scope("admin:read_audit")),
 ):
+    """Return a paginated audit log of gallery actions (prompt created/updated/deleted, API keys issued/revoked, etc.). Filterable by entity_type and entity_id. Requires the `admin:read_audit` scope."""
     q = db.query(PromptEvent).order_by(PromptEvent.created_at.desc())
     if entity_type is not None:
         q = q.filter(PromptEvent.entity_type == entity_type)

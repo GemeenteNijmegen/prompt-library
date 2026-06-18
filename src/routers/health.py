@@ -9,6 +9,7 @@ router = APIRouter(tags=["infrastructure"])
 
 @router.get("/health")
 def health_check(db: Session = Depends(get_db)):
+    """Check service availability. Returns 200 with version info when the API and database are reachable; 503 when the database is down. No authentication required."""
     try:
         db.execute(text("SELECT 1"))
     except Exception:

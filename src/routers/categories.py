@@ -23,6 +23,7 @@ def _require_taxonomy(user=Depends(get_current_user)):
 
 @router.get("/categories", response_model=dict)
 def list_categories(db: Session = Depends(get_db)):
+    """Return all prompt categories. Use the returned IDs with the `category_id` filter on list_prompts. No authentication required."""
     cached = cache_get(_CACHE_KEY)
     if cached is not None:
         return {"data": cached}
@@ -33,6 +34,7 @@ def list_categories(db: Session = Depends(get_db)):
 
 @router.get("/categories/{category_id}", response_model=dict, responses=NOT_FOUND)
 def get_category(category_id: int, db: Session = Depends(get_db)):
+    """Fetch a single category by ID."""
     try:
         return {"data": taxonomy_service.get_category(db, category_id)}
     except NotFoundError as e:
@@ -46,6 +48,7 @@ def get_category(category_id: int, db: Session = Depends(get_db)):
     responses={**UNAUTHORIZED, **FORBIDDEN, **CONFLICT},
 )
 def create_category(data: CategoryCreate, db: Session = Depends(get_db), user=Depends(_require_taxonomy)):
+    """Create a new prompt category. Requires the `admin:manage_taxonomy` scope."""
     try:
         cat = taxonomy_service.create_category(db, data)
         write_event(db, entity_type="category", entity_id=cat["id"], action="created", caller=user, details={"name": cat["name"]})
@@ -61,6 +64,7 @@ def create_category(data: CategoryCreate, db: Session = Depends(get_db), user=De
     responses={**UNAUTHORIZED, **FORBIDDEN, **NOT_FOUND, **CONFLICT},
 )
 def update_category(category_id: int, data: CategoryUpdate, db: Session = Depends(get_db), user=Depends(_require_taxonomy)):
+    """Update a category's name or description. Requires the `admin:manage_taxonomy` scope."""
     try:
         cat = taxonomy_service.update_category(db, category_id, data)
         write_event(db, entity_type="category", entity_id=category_id, action="updated", caller=user, details={"name": cat["name"]})
@@ -78,6 +82,7 @@ def update_category(category_id: int, data: CategoryUpdate, db: Session = Depend
     responses={**UNAUTHORIZED, **FORBIDDEN, **NOT_FOUND},
 )
 def delete_category(category_id: int, db: Session = Depends(get_db), user=Depends(_require_taxonomy)):
+    """Soft-delete a category. Prompts in this category are not deleted. Requires the `admin:manage_taxonomy` scope."""
     try:
         taxonomy_service.soft_delete_category(db, category_id)
         write_event(db, entity_type="category", entity_id=category_id, action="deleted", caller=user)
