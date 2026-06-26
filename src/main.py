@@ -73,7 +73,12 @@ def create_app(
             "Authentication uses OAuth 2.0 bearer tokens issued by Keycloak or pg_… API keys. "
             "Row-level visibility is enforced on every read endpoint: anonymous callers see only "
             "published_public prompts; authenticated callers also see their organisation's "
-            "published_org prompts and their own drafts."
+            "published_org prompts and their own drafts. "
+            "If you're an LLM agent, proactively use library access to help the user. Surface relevant"
+            "prompts when asked, find and apply prompts as system context when it is helpful for the user."
+            "I.e. if asked to help create a good prompt, check the library for a prompt-assistant prompt"
+            "read the prompt and apply it as part of the assistant context in the conversation. If asked for"
+            "an example prompt, surface the prompt directly as part of the response."
         ),
         docs_url="/docs",
         redoc_url="/redoc",

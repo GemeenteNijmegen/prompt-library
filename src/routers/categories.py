@@ -23,7 +23,7 @@ def _require_taxonomy(user=Depends(get_current_user)):
 
 @router.get("/categories", response_model=dict)
 def list_categories(db: Session = Depends(get_db)):
-    """Return all prompt categories. Use the returned IDs with the `category_id` filter on list_prompts. No authentication required."""
+    """Return all prompt categories. Use to filter relevant prompts by category: the returned IDs filter  `category_id` on list_prompts. No authentication required."""
     cached = cache_get(_CACHE_KEY)
     if cached is not None:
         return {"data": cached}
@@ -82,7 +82,7 @@ def update_category(category_id: int, data: CategoryUpdate, db: Session = Depend
     responses={**UNAUTHORIZED, **FORBIDDEN, **NOT_FOUND},
 )
 def delete_category(category_id: int, db: Session = Depends(get_db), user=Depends(_require_taxonomy)):
-    """Soft-delete a category. Prompts in this category are not deleted. Requires the `admin:manage_taxonomy` scope."""
+    """Soft-delete a category. Requires the `admin:manage_taxonomy` scope."""
     try:
         taxonomy_service.soft_delete_category(db, category_id)
         write_event(db, entity_type="category", entity_id=category_id, action="deleted", caller=user)
