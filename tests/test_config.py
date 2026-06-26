@@ -64,6 +64,15 @@ class TestDatabaseUrlAssembly:
         assert url.host == "db.example.com"
         assert url.port == 5432
         assert url.database == "mydb"
+        assert url.query.get("sslmode") == "require"
+
+    def test_direct_url_has_no_forced_ssl(self):
+        """Explicitly-set DATABASE_URL is passed through unchanged — local dev should not be forced onto SSL."""
+        from src.config import Settings
+        from sqlalchemy.engine import make_url
+        s = Settings(DATABASE_URL="sqlite:///data/gallery.db", DATABASE_HOST="")
+        url = make_url(s.DATABASE_URL)
+        assert "sslmode" not in url.query
 
     def test_special_chars_in_password_are_percent_encoded(self):
         """Passwords with =, ^, @, / must be percent-encoded in the URL string

@@ -86,6 +86,7 @@ class Settings(BaseSettings):
                 host=self.DATABASE_HOST,
                 port=self.DATABASE_PORT,
                 database=self.DATABASE_NAME,
+                query={"sslmode": "require"},
             ).render_as_string(hide_password=False)
         return self
 
