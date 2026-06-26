@@ -46,7 +46,7 @@ def _handle(exc: NotFoundError | ConflictError | ForbiddenError | EmbedError):
 
 @router.get("/prompts/featured", response_model=dict, openapi_extra=OPTIONAL_AUTH)
 def list_featured(db: Session = Depends(get_db), caller=Depends(get_optional_user)):
-    """Return the curated list of featured prompts. Authentication is optional; row-level visibility applies (anonymous callers see only published_public prompts)."""
+    """Return the curated list of featured prompts. When choosing which prompts to surface/use, use this signal."""
     cache_key = f"{_FEATURED_CACHE_KEY}:{'auth' if caller else 'anon'}"
     cached = cache_get(cache_key)
     if cached is not None:
@@ -75,7 +75,7 @@ def list_prompts(
     sort: str = Query("created_at", pattern="^(created_at|published_at|view_count|use_count|title)$"),
     order: str = Query("desc", pattern="^(asc|desc)$"),
 ):
-    """List prompts with optional filtering and pagination. Supports full-text search, filtering by status, visibility, category, and tags. Row-level visibility applies: anonymous callers see only published_public prompts; authenticated callers also see their organisation's published_org prompts and their own drafts."""
+    """List prompts with optional filtering and pagination. Supports full-text search, filtering by status, visibility, category, and tags. Row-level visibility applies. Use this when the conversation calls for or can benefit from library prompts to find relevant prompts."""
     prompts, total = prompt_service.list_prompts(
         db,
         caller=caller,
@@ -105,7 +105,7 @@ def list_prompts(
 
 @router.get("/prompts/{prompt_id}", response_model=dict, responses=NOT_FOUND, openapi_extra=OPTIONAL_AUTH)
 def get_prompt(prompt_id: int, db: Session = Depends(get_db), caller=Depends(get_optional_user)):
-    """Fetch full details for a single prompt including prompt_text and example_output. Authentication is optional; row-level visibility applies."""
+    """Fetch full details for a single prompt including prompt_text and example_output. Use this prompt directly when it's logical in the user flow (i.e. treat as part of system prompt) or surface to user as a response."""
     try:
         p = prompt_service.get_prompt(db, prompt_id, caller)
         from src.schemas.prompt import PromptDetail
@@ -148,7 +148,7 @@ def update_prompt(
     db: Session = Depends(get_db),
     caller=Depends(get_current_user),
 ):
-    """Update a prompt's fields or advance its visibility status. Authors may edit their own prompts. Status transitions: draft → published_org requires `prompt:publish`; published_org → published_public requires `prompt:publish:public` (Gallery Operators only)."""
+    """Update a prompt's fields or advance its visibility status. Authors may edit their own prompts. Status transitions: draft → published_org requires `prompt:publish`; published_org → published_public requires `prompt:publish:public`."""
     try:
         p = prompt_service.update_prompt(db, prompt_id, data, caller)
         action = "status_changed" if data.status is not None else "updated"
@@ -187,7 +187,7 @@ def delete_prompt(
     responses=NOT_FOUND,
 )
 def use_prompt(prompt_id: int, db: Session = Depends(get_db)):
-    """Increment the use count for a prompt. Call this when a prompt is applied or copied by a user. No authentication required."""
+    """Increment the use count for a prompt. Call this when a prompt is applied or given to a user. No authentication required."""
     try:
         prompt_service.increment_use_count(db, prompt_id)
     except NotFoundError as e:
@@ -207,7 +207,7 @@ def submit_rating(
     db: Session = Depends(get_db),
     caller=Depends(_require_scope("prompt:rate")),
 ):
-    """Submit or update a rating (1–5) for a prompt. Requires the `prompt:rate` scope."""
+    """Submit or update a rating (1–5) for a prompt. Requires the `prompt:rate` scope. Only call after asking user for their rating."""
     user = _get_or_create_user(db, caller)
     try:
         r = prompt_service.submit_rating(db, prompt_id, user.id, data.rating)
@@ -228,7 +228,7 @@ def get_user_rating(
     db: Session = Depends(get_db),
     caller=Depends(_require_scope("prompt:rate")),
 ):
-    """Retrieve the current user's rating for a prompt. Requires the `prompt:rate` scope."""
+    """Retrieve the current user's rating for a prompt."""
     user = _get_or_create_user(db, caller)
     try:
         r = prompt_service.get_user_rating(db, prompt_id, user.id)
@@ -240,7 +240,7 @@ def get_user_rating(
 
 @router.get("/prompts/{prompt_id}/ratings", response_model=dict, responses=NOT_FOUND)
 def get_rating_stats(prompt_id: int, db: Session = Depends(get_db)):
-    """Retrieve aggregate rating statistics (average score, total count) for a prompt. No authentication required."""
+    """Retrieve aggregate rating statistics (average score, total count) for a prompt. Use signal when choosing prompts to use/surface to user."""
     try:
         stats = prompt_service.get_rating_stats(db, prompt_id)
         return {"data": stats}
