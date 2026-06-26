@@ -19,3 +19,5 @@ htmlcov/
 *.log
 _site/
 .claude/
+.DS_Store
+.mcp.json
