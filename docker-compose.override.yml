@@ -1,0 +1,13 @@
+services:
+  keycloak:
+    ports:
+      - "8180:8080"
+
+  app:
+    networks:
+      - default
+      - leiden-dev
+
+networks:
+  leiden-dev:
+    external: true
