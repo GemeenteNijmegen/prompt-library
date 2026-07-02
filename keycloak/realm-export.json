@@ -162,6 +162,20 @@
             "claim.name": "realm_access.roles",
             "jsonType.label": "String"
           }
+        },
+        {
+          "name": "org-id",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "org_id",
+            "claim.name": "org_id",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "false"
+          }
         }
       ]
     }
@@ -309,7 +323,8 @@
       "defaultClientScopes": [
         "openid",
         "profile",
-        "email"
+        "email",
+        "gallery-defaults"
       ],
       "optionalClientScopes": [
         "prompt:read",
@@ -672,6 +687,15 @@
       "description": "Test organisation B \u2014 cross-org isolation tests",
       "attributes": {},
       "domains": []
+    },
+    {
+      "id": "00000000-0000-0001-0000-000000000003",
+      "name": "leiden-platform",
+      "alias": "leiden-platform",
+      "enabled": true,
+      "description": "Gemeente Leiden learning platform \u2014 single org for all platform users (hybrid phase)",
+      "attributes": {},
+      "domains": []
     }
   ],
   "users": [
@@ -722,6 +746,9 @@
       "lastName": "User",
       "enabled": true,
       "emailVerified": true,
+      "attributes": {
+        "org_id": ["leiden-platform"]
+      },
       "realmRoles": [
         "prompt:read",
         "prompt:read:restricted",
@@ -744,6 +771,35 @@
           "temporary": false,
           "secretData": "{\"value\":\"eLGya7UslZUzHWumacx7wWSonEAxAeVyELQ4gci2mE4=\",\"salt\":\"q83vASNFZ4mrze8BI0VniQ==\",\"additionalParameters\":{}}",
           "credentialData": "{\"hashIterations\":27500,\"algorithm\":\"pbkdf2-sha256\",\"additionalParameters\":{}}"
+        }
+      ]
+    },
+    {
+      "username": "leiden-dev",
+      "email": "leiden-dev@example.com",
+      "firstName": "Leiden",
+      "lastName": "Dev",
+      "enabled": true,
+      "emailVerified": true,
+      "attributes": {
+        "org_id": ["leiden-platform"]
+      },
+      "realmRoles": [
+        "prompt:read",
+        "prompt:read:restricted",
+        "prompt:create",
+        "prompt:write",
+        "prompt:publish",
+        "prompt:rate",
+        "prompt:image",
+        "apikey:create",
+        "offline_access"
+      ],
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "value": "dev"
         }
       ]
     },
