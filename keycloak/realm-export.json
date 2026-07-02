@@ -285,6 +285,28 @@
             "admin:read_audit"
           ]
         }
+      },
+      {
+        "name": "platform-participant",
+        "description": "Leiden platform: participant/coach/organizer → full author bundle (publisher). prompt:publish:public is never granted here.",
+        "composite": true,
+        "composites": {
+          "realm": [
+            "publisher"
+          ]
+        }
+      },
+      {
+        "name": "platform-admin",
+        "description": "Leiden platform: admin → author bundle + moderate + manage_taxonomy. Excludes prompt:publish:public (Gallery Operator action only).",
+        "composite": true,
+        "composites": {
+          "realm": [
+            "platform-participant",
+            "prompt:moderate",
+            "admin:manage_taxonomy"
+          ]
+        }
       }
     ]
   },
@@ -750,19 +772,7 @@
         "org_id": ["leiden-platform"]
       },
       "realmRoles": [
-        "prompt:read",
-        "prompt:read:restricted",
-        "prompt:create",
-        "prompt:write",
-        "prompt:publish",
-        "prompt:publish:public",
-        "prompt:rate",
-        "prompt:image",
-        "prompt:moderate",
-        "apikey:create",
-        "admin:manage_taxonomy",
-        "admin:manage_users",
-        "admin:read_audit",
+        "platform-admin",
         "offline_access"
       ],
       "credentials": [
@@ -785,14 +795,7 @@
         "org_id": ["leiden-platform"]
       },
       "realmRoles": [
-        "prompt:read",
-        "prompt:read:restricted",
-        "prompt:create",
-        "prompt:write",
-        "prompt:publish",
-        "prompt:rate",
-        "prompt:image",
-        "apikey:create",
+        "platform-participant",
         "offline_access"
       ],
       "credentials": [
