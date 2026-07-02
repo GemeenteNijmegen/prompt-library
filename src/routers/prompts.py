@@ -53,7 +53,7 @@ def list_featured(db: Session = Depends(get_db), caller=Depends(get_optional_use
         return {"data": cached}
     prompts = prompt_service.list_featured(db, caller)
     from src.schemas.prompt import PromptSummary
-    data = [PromptSummary.model_validate(p).model_dump() for p in prompts]
+    data = [PromptSummary.model_validate(p).model_dump(mode='json') for p in prompts]
     cache_set(cache_key, data)
     return {"data": data}
 
@@ -93,7 +93,7 @@ def list_prompts(
     from src.schemas.prompt import PromptSummary
     import math
     return {
-        "data": [PromptSummary.model_validate(p).model_dump() for p in prompts],
+        "data": [PromptSummary.model_validate(p).model_dump(mode='json') for p in prompts],
         "meta": {
             "total": total,
             "page": page,
@@ -109,7 +109,7 @@ def get_prompt(prompt_id: int, db: Session = Depends(get_db), caller=Depends(get
     try:
         p = prompt_service.get_prompt(db, prompt_id, caller)
         from src.schemas.prompt import PromptDetail
-        return {"data": PromptDetail.model_validate(p).model_dump()}
+        return {"data": PromptDetail.model_validate(p).model_dump(mode='json')}
     except NotFoundError as e:
         _handle(e)
 
@@ -132,7 +132,7 @@ def create_prompt(
         cache_delete(f"{_FEATURED_CACHE_KEY}:auth")
         cache_delete(f"{_FEATURED_CACHE_KEY}:anon")
         from src.schemas.prompt import PromptDetail
-        return {"data": PromptDetail.model_validate(p).model_dump(), "meta": {"action": "created"}}
+        return {"data": PromptDetail.model_validate(p).model_dump(mode='json'), "meta": {"action": "created"}}
     except (NotFoundError, ConflictError, ForbiddenError, EmbedError) as e:
         _handle(e)
 
@@ -156,7 +156,7 @@ def update_prompt(
         cache_delete(f"{_FEATURED_CACHE_KEY}:auth")
         cache_delete(f"{_FEATURED_CACHE_KEY}:anon")
         from src.schemas.prompt import PromptDetail
-        return {"data": PromptDetail.model_validate(p).model_dump()}
+        return {"data": PromptDetail.model_validate(p).model_dump(mode='json')}
     except (NotFoundError, ConflictError, ForbiddenError, EmbedError) as e:
         _handle(e)
 
@@ -213,7 +213,7 @@ def submit_rating(
         r = prompt_service.submit_rating(db, prompt_id, user.id, data.rating)
         write_event(db, entity_type="rating", entity_id=prompt_id, action="submitted", caller=caller, details={"rating": data.rating})
         from src.schemas.rating import RatingDetail
-        return {"data": RatingDetail.model_validate(r).model_dump()}
+        return {"data": RatingDetail.model_validate(r).model_dump(mode='json')}
     except NotFoundError as e:
         _handle(e)
 
@@ -233,7 +233,7 @@ def get_user_rating(
     try:
         r = prompt_service.get_user_rating(db, prompt_id, user.id)
         from src.schemas.rating import RatingDetail
-        return {"data": RatingDetail.model_validate(r).model_dump()}
+        return {"data": RatingDetail.model_validate(r).model_dump(mode='json')}
     except NotFoundError as e:
         _handle(e)
 
