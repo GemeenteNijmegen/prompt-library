@@ -75,10 +75,17 @@ def test_featured_prompts_cached_on_second_call(client):
     assert resp2.json()["data"] == ["__cached_featured__"]
 
 
-def test_featured_prompts_cache_invalidated_after_create(client, auth_headers, sample_category):
+def test_featured_prompts_cache_invalidated_after_create(client, auth_headers, sample_category, db):
+    # Featured-cache keys are per-caller (ADR 0006 — capability flags are
+    # caller-dependent), not a shared "auth"/"anon" pair.
+    client.get("/api/v1/prompts/featured", headers=auth_headers)
     client.get("/api/v1/prompts/featured")
+
+    from src.models.user import User
+    caller = db.query(User).filter(User.external_id == "dev-user-001").first()
+
     cache_mod.cache_set("prompts:featured:anon", ["__stale__"])
-    cache_mod.cache_set("prompts:featured:auth", ["__stale__"])
+    cache_mod.cache_set(f"prompts:featured:{caller.id}", ["__stale__"])
 
     resp = client.post(
         "/api/v1/prompts",
@@ -94,7 +101,7 @@ def test_featured_prompts_cache_invalidated_after_create(client, auth_headers, s
     assert resp.status_code == 201
 
     assert cache_mod.cache_get("prompts:featured:anon") is None
-    assert cache_mod.cache_get("prompts:featured:auth") is None
+    assert cache_mod.cache_get(f"prompts:featured:{caller.id}") is None
 
 
 def test_redis_cache_get_and_set():

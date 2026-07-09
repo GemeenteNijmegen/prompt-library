@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from src.cache import cache_delete, cache_get, cache_set
 from src.dependencies import get_db, get_current_user, get_optional_user
-from src.schemas.prompt import PromptCreate, PromptUpdate
+from src.schemas.prompt import PromptCreate, PromptDetail, PromptSummary, PromptUpdate
 from src.schemas.rating import RatingSubmit
 from src.services import prompt_service
 from src.services.audit_service import write_event
@@ -42,18 +42,35 @@ def _handle(exc: NotFoundError | ConflictError | ForbiddenError | EmbedError):
     )
 
 
+def _summary_dict(p, caller) -> dict:
+    data = PromptSummary.model_validate(p).model_dump(mode='json')
+    data.update(prompt_service.prompt_capabilities(p, caller))
+    return data
+
+
+def _detail_dict(p, caller) -> dict:
+    data = PromptDetail.model_validate(p).model_dump(mode='json')
+    data.update(prompt_service.prompt_capabilities(p, caller))
+    return data
+
+
+def _caller_cache_key(caller) -> str:
+    return str(caller.id) if caller else "anon"
+
+
 # ── Featured must come before /{id} ──────────────────────────────────────────
 
 @router.get("/prompts/featured", response_model=dict, openapi_extra=OPTIONAL_AUTH)
 def list_featured(db: Session = Depends(get_db), caller=Depends(get_optional_user)):
     """Return the curated list of featured prompts. When choosing which prompts to surface/use, use this signal."""
-    cache_key = f"{_FEATURED_CACHE_KEY}:{'auth' if caller else 'anon'}"
+    # Capability flags are caller-dependent, so the cache key must be too
+    # (ADR 0006) — otherwise one caller's flags would leak to another.
+    cache_key = f"{_FEATURED_CACHE_KEY}:{_caller_cache_key(caller)}"
     cached = cache_get(cache_key)
     if cached is not None:
         return {"data": cached}
     prompts = prompt_service.list_featured(db, caller)
-    from src.schemas.prompt import PromptSummary
-    data = [PromptSummary.model_validate(p).model_dump(mode='json') for p in prompts]
+    data = [_summary_dict(p, caller) for p in prompts]
     cache_set(cache_key, data)
     return {"data": data}
 
@@ -90,10 +107,9 @@ def list_prompts(
         sort=sort,
         order=order,
     )
-    from src.schemas.prompt import PromptSummary
     import math
     return {
-        "data": [PromptSummary.model_validate(p).model_dump(mode='json') for p in prompts],
+        "data": [_summary_dict(p, caller) for p in prompts],
         "meta": {
             "total": total,
             "page": page,
@@ -108,8 +124,7 @@ def get_prompt(prompt_id: int, db: Session = Depends(get_db), caller=Depends(get
     """Fetch full details for a single prompt including prompt_text and example_output. Use this prompt directly when it's logical in the user flow (i.e. treat as part of system prompt) or surface to user as a response."""
     try:
         p = prompt_service.get_prompt(db, prompt_id, caller)
-        from src.schemas.prompt import PromptDetail
-        return {"data": PromptDetail.model_validate(p).model_dump(mode='json')}
+        return {"data": _detail_dict(p, caller)}
     except NotFoundError as e:
         _handle(e)
 
@@ -129,10 +144,9 @@ def create_prompt(
     try:
         p = prompt_service.create_prompt(db, data, caller)
         write_event(db, entity_type="prompt", entity_id=p.id, action="created", caller=caller, details={"title": p.title, "status": p.status})
-        cache_delete(f"{_FEATURED_CACHE_KEY}:auth")
         cache_delete(f"{_FEATURED_CACHE_KEY}:anon")
-        from src.schemas.prompt import PromptDetail
-        return {"data": PromptDetail.model_validate(p).model_dump(mode='json'), "meta": {"action": "created"}}
+        cache_delete(f"{_FEATURED_CACHE_KEY}:{_caller_cache_key(caller)}")
+        return {"data": _detail_dict(p, caller), "meta": {"action": "created"}}
     except (NotFoundError, ConflictError, ForbiddenError, EmbedError) as e:
         _handle(e)
 
@@ -153,10 +167,9 @@ def update_prompt(
         p = prompt_service.update_prompt(db, prompt_id, data, caller)
         action = "status_changed" if data.status is not None else "updated"
         write_event(db, entity_type="prompt", entity_id=p.id, action=action, caller=caller, details={"status": p.status})
-        cache_delete(f"{_FEATURED_CACHE_KEY}:auth")
         cache_delete(f"{_FEATURED_CACHE_KEY}:anon")
-        from src.schemas.prompt import PromptDetail
-        return {"data": PromptDetail.model_validate(p).model_dump(mode='json')}
+        cache_delete(f"{_FEATURED_CACHE_KEY}:{_caller_cache_key(caller)}")
+        return {"data": _detail_dict(p, caller)}
     except (NotFoundError, ConflictError, ForbiddenError, EmbedError) as e:
         _handle(e)
 
@@ -175,8 +188,8 @@ def delete_prompt(
     try:
         p = prompt_service.delete_prompt(db, prompt_id, caller)
         write_event(db, entity_type="prompt", entity_id=p.id, action="deleted", caller=caller, details={"title": p.title})
-        cache_delete(f"{_FEATURED_CACHE_KEY}:auth")
         cache_delete(f"{_FEATURED_CACHE_KEY}:anon")
+        cache_delete(f"{_FEATURED_CACHE_KEY}:{_caller_cache_key(caller)}")
     except (NotFoundError, ForbiddenError) as e:
         _handle(e)
 

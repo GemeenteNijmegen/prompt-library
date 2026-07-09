@@ -3,10 +3,23 @@ services:
     ports:
       - "8180:8080"
 
+  # Both profiles publish the same "gallery" alias on leiden-dev so the platform's
+  # GALLERY_API_URL (backend/.env) doesn't need to change when switching between
+  # `docker compose up` (app) and `docker compose --profile dev up` (app-dev) —
+  # only one of the two is ever running at a time.
   app:
     networks:
-      - default
-      - leiden-dev
+      default:
+      leiden-dev:
+        aliases:
+          - gallery
+
+  app-dev:
+    networks:
+      default:
+      leiden-dev:
+        aliases:
+          - gallery
 
 networks:
   leiden-dev:
