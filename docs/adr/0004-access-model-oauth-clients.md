@@ -59,6 +59,21 @@ This contract applies to OAuth (JWT) requests. **API-key requests are not JWTs**
 
 ## Scope catalogue
 
+> **Revision 3 (2026-07-09): scope enforcement is role-holding, not client-scope negotiation.**
+> This section originally described `admin:*` / `prompt:publish:public` / `prompt:moderate` as
+> "restricted at the Keycloak client-scope level" — i.e. an org-deployed client's optional-scope
+> list would gate what could appear in its tokens. That mechanism was never actually built: the
+> gallery reads permissions from `realm_access.roles` (populated by the `gallery-defaults`
+> scope's realm-roles mapper, a *default* scope on every client, independent of any client's
+> optional-scope list). The `prompt:*` client scopes carry no protocol mappers and do not filter
+> anything. **The real and only control is who holds the role.** Only Gallery Operators (Gallery
+> Ops org, local accounts) are ever granted `admin:*` / `prompt:moderate` / `prompt:publish:public`
+> — no customer Organisation's End User holds them, so no org-deployed client can ever carry them,
+> regardless of what it requests. Client optional-scope lists (below) are retained for consent-
+> screen legibility only, not as a security boundary. If per-client scope narrowing is ever
+> needed, it requires new work (a per-client-filtered roles claim plus an `auth.py` change to
+> trust it) — not configuration alone.
+
 Scopes correspond 1:1 to gallery permission verbs. Each scope is a Keycloak client scope with a role scope mapper attached; the scope appears in a user's token iff they hold the corresponding role.
 
 | Scope | Grants | Default? | Available to org-deployed clients? |

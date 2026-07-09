@@ -41,9 +41,11 @@ Use **Keycloak (v26+)** as the IdP.
 - Org discovery at login uses email-domain mapping (Keycloak verified domains per Organisation). No picker fallback in v1.
 - Customer-org provisioning (creating a Keycloak Organization, configuring Entra federation, assigning the first Organisation Admin) is a manual Gallery Operator task. Self-serve org onboarding is out of scope for v1.
 
+> **Correction (2026-07-09):** the paragraph below originally described Organisation Admins as self-serving directly in the Keycloak admin console. A plain Keycloak realm role does not scope admin-console access to one Organisation's members — realm roles are realm-wide — so that would require Keycloak's fine-grained per-Organization admin permissions (a separate, heavier feature, not yet configured and potentially preview-flagged depending on Keycloak version). **v1 reality:** `organization-admin` is a gallery-facing realm role only (drives `is_org_admin` / draft-visibility logic — see CONTEXT.md). Day-to-day per-Organisation user/scope management remains a Gallery-Operator-mediated task until real delegated admin-console access is built and gets its own ADR.
+
 Day-to-day per-Organisation user management is delegated: each Organisation has Organisation Admins (a Keycloak role) who self-serve user invitations and gallery-scope assignment for their own org in the Keycloak admin console. Gallery Operators do not gate routine per-user changes.
 
-**Hosting:** TBD. Reuse of a shared Keycloak instance operated by the same platform team is acceptable iff (a) the shared instance is v26+, (b) realm config is self-serve for the gallery team, (c) DCR is permitted in the gallery realm, (d) egress to arbitrary customer Entra tenants is unrestricted, (e) the trust boundary aligns with customer-data expectations, (f) the shared instance's SLA fits. Otherwise run dedicated.
+**Hosting (decided 2026-07-09): shared.** All six conditions confirmed against the shared instance: (a) v26+, (b) realm config is self-serve for the gallery team, (c) DCR is permitted in the gallery realm, (d) egress to arbitrary customer Entra tenants is unrestricted, (e) the trust boundary aligns with customer-data expectations, (f) the shared instance's SLA fits. The gallery realm is one realm among others on this instance — production realm config must not assume it owns realm-independent settings (e.g. `master`-realm policy, instance-wide SMTP/hostname config); anything realm-scoped is fair game.
 
 ## Why Keycloak over the alternatives
 
