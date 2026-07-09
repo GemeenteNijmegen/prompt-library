@@ -57,6 +57,14 @@ class PromptSummary(BaseModel):
     categories: list[CategorySummary]
     tags: list[TagSummary]
 
+    # Caller-dependent capability flags (ADR 0006) — computed server-side,
+    # never read from the ORM object. Default False so from_attributes
+    # validation doesn't fail; the router overwrites them per-caller.
+    can_edit: bool = False
+    can_delete: bool = False
+    can_publish: bool = False
+    can_feature: bool = False
+
 
 class PromptDetail(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -78,3 +86,8 @@ class PromptDetail(BaseModel):
     published_at: datetime | None
     categories: list[CategorySummary]
     tags: list[TagSummary]
+
+    can_edit: bool = False
+    can_delete: bool = False
+    can_publish: bool = False
+    can_feature: bool = False

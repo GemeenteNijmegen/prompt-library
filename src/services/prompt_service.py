@@ -4,7 +4,7 @@ import time
 from datetime import datetime, timezone
 
 import numpy as np
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_, select, true
 from sqlalchemy.orm import Session, selectinload
 
 log = logging.getLogger(__name__)
@@ -121,12 +121,19 @@ def visibility_filter(caller):
     published_public
     OR (published_org AND org_id = caller.org_id)
     OR (draft AND (author_id = caller.id OR caller is Org Admin of author's org))
+    OR caller holds prompt:moderate (sees everything — mirrors prompt_capabilities(),
+       which already grants moderators can_edit/can_delete/can_feature on any prompt;
+       without this, a moderator could be told can_edit=true for a prompt this filter
+       then hides from them, e.g. GET/PATCH on someone else's draft 404ing)
 
     Algorithm whitelist: RS256 for JWKS path, HS256 for HMAC path — do not
     remove the check in jwt_utils; it prevents algorithm-confusion attacks.
     """
     if caller is None:
         return Prompt.status == "published_public"
+
+    if caller.has_scope("prompt:moderate"):
+        return true()
 
     org_id = getattr(caller, "org_id", "")
 
@@ -481,6 +488,27 @@ def _apply_status_transition(prompt: Prompt, new_status: str, caller) -> None:
     prompt.status = new_status
     if new_status in ("published_org", "published_public"):
         prompt.published_at = _now()
+
+
+def prompt_capabilities(prompt: Prompt, caller) -> dict:
+    """Per-caller capability flags for a prompt (ADR 0006).
+
+    Surfaces the server's ownership + scope rules as booleans so consumers
+    render affordances without re-implementing the authorization logic.
+    """
+    if caller is None:
+        return {"can_edit": False, "can_delete": False, "can_publish": False, "can_feature": False}
+
+    is_owner = prompt.creator_id == caller.id
+    is_moderator = caller.has_scope("prompt:moderate")
+
+    return {
+        "can_edit": is_owner or is_moderator,
+        # Mirrors the ownership check in delete_prompt() below.
+        "can_delete": is_owner or is_moderator,
+        "can_publish": (is_owner and caller.has_scope("prompt:publish")) or is_moderator,
+        "can_feature": is_moderator,
+    }
 
 
 def delete_prompt(db: Session, prompt_id: int, caller) -> Prompt:

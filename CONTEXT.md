@@ -32,24 +32,25 @@ The gallery's identity and authorization design recognises five actor concepts. 
 
 ## Visibility model
 
-Prompts have a visibility state that determines who can see them. The state is independent from scope-based authorization: scopes gate *verbs* (read, write, publish, etc.), and visibility is a row-level filter applied uniformly to read endpoints regardless of which scopes the caller holds.
+Prompts have a visibility state that determines who can see them. Visibility is a row-level filter applied uniformly to read endpoints, mostly independent from scope-based authorization (scopes gate *verbs* like read/write/publish) — with one deliberate exception: a `prompt:moderate` holder bypasses the filter entirely. This keeps visibility consistent with per-prompt capabilities (see ADR 0006): `prompt_capabilities()` already grants moderators `can_edit`/`can_delete`/`can_feature` on *any* prompt, so visibility must let them reach it too, or a moderator gets told they can edit a prompt that then 404s.
 
 | Prompt state | Visible to |
 |---|---|
-| `draft` | The author + Organisation Admins of the author's Organisation |
-| `published_org` | All End Users in the author's Organisation |
+| `draft` | The author + Organisation Admins of the author's Organisation + `prompt:moderate` holders |
+| `published_org` | All End Users in the author's Organisation + `prompt:moderate` holders |
 | `published_public` | All End Users across all Organisations |
 
 The row-level filter applied to every read query is conceptually:
 
 ```sql
-WHERE status = 'published_public'
+WHERE :caller_has_prompt_moderate
+   OR status = 'published_public'
    OR (status = 'published_org' AND org_id = :caller_org_id)
    OR (status = 'draft' AND (author_id = :caller_id
                              OR :caller_is_org_admin_of_author_org))
 ```
 
-`org_id` comes from the JWT (see ADR 0004 for the JWT contract). `author_id` is on the prompt row. `:caller_is_org_admin_of_author_org` is derived from the caller's roles.
+`org_id` comes from the JWT (see ADR 0004 for the JWT contract). `author_id` is on the prompt row. `:caller_is_org_admin_of_author_org` is derived from the caller's roles (`admin:manage_users` — note this is currently unreachable for platform-mapped roles; see `docs/adr/0006-surrogate-user-key-and-per-prompt-capabilities.md` and the Leiden platform's issue 05 role→scope mapping. `prompt:moderate` is the scope platform roles actually carry for this purpose).
 
 ## Publish workflow
 

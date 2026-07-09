@@ -98,7 +98,9 @@ def test_same_org_user_cannot_see_cross_org_published_org(client, db, dev_user):
     other_user = _make_user(db, "other-org-user", org_id="other-org-999")
     p = _create_prompt(db, other_user, status="published_org")
 
-    token = make_jwt(sub="dev-user-001", org_id=TEST_ORG_ID)
+    # Explicit non-moderator scope — conftest's default make_jwt() bundle
+    # includes prompt:moderate, which deliberately bypasses org isolation.
+    token = make_jwt(sub="dev-user-001", org_id=TEST_ORG_ID, scope=["prompt:read"])
     r = client.get(f"/api/v1/prompts/{p.id}", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 404
 
@@ -114,7 +116,9 @@ def test_non_author_cannot_see_other_org_draft(client, db, dev_user):
     other_user = _make_user(db, "draft-owner", org_id="other-org-999")
     p = _create_prompt(db, other_user, status="draft")
 
-    token = make_jwt(sub="dev-user-001", org_id=TEST_ORG_ID)
+    # Explicit non-moderator scope — conftest's default make_jwt() bundle
+    # includes prompt:moderate, which deliberately bypasses org isolation.
+    token = make_jwt(sub="dev-user-001", org_id=TEST_ORG_ID, scope=["prompt:read"])
     r = client.get(f"/api/v1/prompts/{p.id}", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 404
 
@@ -149,6 +153,18 @@ def test_org_admin_cannot_see_other_org_draft(client, db):
     assert r.status_code == 404
 
 
+def test_moderator_sees_other_org_draft(client, db):
+    """prompt:moderate is more permissive than admin:manage_users — it bypasses
+    the org boundary too, mirroring the universal can_edit/can_delete grant in
+    prompt_capabilities(). See CONTEXT.md § Visibility model."""
+    other_user = _make_user(db, "moderated-draft-author", org_id="other-org-999")
+    p = _create_prompt(db, other_user, status="draft")
+
+    token = make_jwt(sub="dev-user-001", org_id=TEST_ORG_ID, scope=["prompt:read", "prompt:moderate"])
+    r = client.get(f"/api/v1/prompts/{p.id}", headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 200
+
+
 # ---------------------------------------------------------------------------
 # List endpoint applies same filter
 # ---------------------------------------------------------------------------
@@ -157,7 +173,9 @@ def test_list_excludes_cross_org_published_org(client, db, dev_user):
     other_user = _make_user(db, "cross-org-author", org_id="different-org-888")
     cross_org_prompt = _create_prompt(db, other_user, status="published_org")
 
-    token = make_jwt(sub="dev-user-001", org_id=TEST_ORG_ID)
+    # Explicit non-moderator scope — conftest's default make_jwt() bundle
+    # includes prompt:moderate, which deliberately bypasses org isolation.
+    token = make_jwt(sub="dev-user-001", org_id=TEST_ORG_ID, scope=["prompt:read"])
     r = client.get("/api/v1/prompts", headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200
     ids = [item["id"] for item in r.json()["data"]]
