@@ -319,7 +319,7 @@
   "authenticationFlows": [
     {
       "alias": "gallery-ops-browser",
-      "description": "Realm browser flow. Home-realm discovery redirects federated End Users to their Organisation's Entra IdP before any credential step; only local Gallery Ops accounts reach the passkey-OR-(password+TOTP) branches. See ADR 0007, issue #94.",
+      "description": "Realm browser flow, mirroring Keycloak's default: Cookie / IdP-Redirector / Organization run before forms, so home-realm discovery routes federated users to Entra; only local Gallery Ops accounts reach the passkey-OR-(password+TOTP) forms. ADR 0007, #94.",
       "providerId": "basic-flow",
       "topLevel": true,
       "builtIn": false,
@@ -342,14 +342,60 @@
           "authenticatorFlow": true,
           "requirement": "ALTERNATIVE",
           "priority": 30,
+          "flowAlias": "gallery-ops-organization",
+          "userSetupAllowed": false
+        },
+        {
+          "authenticatorFlow": true,
+          "requirement": "ALTERNATIVE",
+          "priority": 40,
           "flowAlias": "gallery-ops-forms",
           "userSetupAllowed": false
         }
       ]
     },
     {
+      "alias": "gallery-ops-organization",
+      "description": "Home-realm discovery wrapper — mirror of Keycloak's built-in 'Organization' subflow. Redirects federated End Users to their Organisation's Entra IdP; passes through for local Gallery Ops accounts.",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticatorFlow": true,
+          "requirement": "CONDITIONAL",
+          "priority": 10,
+          "flowAlias": "gallery-ops-conditional-organization",
+          "userSetupAllowed": false
+        }
+      ]
+    },
+    {
+      "alias": "gallery-ops-conditional-organization",
+      "description": "Mirror of Keycloak's 'Browser - Conditional Organization': runs the organization identity-first authenticator only when an organization context applies.",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "conditional-user-configured",
+          "authenticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "userSetupAllowed": false
+        },
+        {
+          "authenticator": "organization",
+          "authenticatorFlow": false,
+          "requirement": "ALTERNATIVE",
+          "priority": 20,
+          "userSetupAllowed": false
+        }
+      ]
+    },
+    {
       "alias": "gallery-ops-forms",
-      "description": "Identity-first username entry, then home-realm discovery, then local credential branches.",
+      "description": "Local Gallery Ops credential path: identity-first username entry, then the passkey-OR-(password+TOTP) branches.",
       "providerId": "basic-flow",
       "topLevel": false,
       "builtIn": false,
@@ -362,16 +408,9 @@
           "userSetupAllowed": false
         },
         {
-          "authenticator": "organization",
-          "authenticatorFlow": false,
-          "requirement": "REQUIRED",
-          "priority": 20,
-          "userSetupAllowed": false
-        },
-        {
           "authenticatorFlow": true,
           "requirement": "REQUIRED",
-          "priority": 30,
+          "priority": 20,
           "flowAlias": "gallery-ops-credentials",
           "userSetupAllowed": false
         }
