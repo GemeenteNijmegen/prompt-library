@@ -1,0 +1,371 @@
+{
+  "realm": "gallery",
+  "enabled": true,
+  "displayName": "Prompt Gallery",
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "passwordPolicy": "length(12) and upperCase(1) and lowerCase(1) and digits(1) and specialChars(1) and notUsername(undefined)",
+  "accessTokenLifespan": 900,
+  "ssoSessionMaxLifespan": 2592000,
+  "ssoSessionIdleTimeout": 604800,
+  "revokeRefreshToken": true,
+  "refreshTokenMaxReuse": 0,
+  "organizationsEnabled": true,
+  "defaultDefaultClientScopes": [
+    "acr",
+    "basic",
+    "email",
+    "profile",
+    "roles",
+    "web-origins",
+    "gallery-defaults"
+  ],
+  "defaultOptionalClientScopes": [
+    "prompt:read",
+    "prompt:read:restricted",
+    "prompt:create",
+    "prompt:write",
+    "prompt:publish",
+    "prompt:publish:public",
+    "prompt:rate",
+    "prompt:image",
+    "prompt:moderate",
+    "apikey:create",
+    "admin:manage_taxonomy",
+    "admin:manage_users",
+    "admin:read_audit"
+  ],
+  "clientScopes": [
+    {
+      "name": "prompt:read",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false"
+      }
+    },
+    {
+      "name": "prompt:read:restricted",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false"
+      }
+    },
+    {
+      "name": "prompt:create",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false"
+      }
+    },
+    {
+      "name": "prompt:write",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false"
+      }
+    },
+    {
+      "name": "prompt:publish",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false"
+      }
+    },
+    {
+      "name": "prompt:publish:public",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false"
+      }
+    },
+    {
+      "name": "prompt:rate",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false"
+      }
+    },
+    {
+      "name": "prompt:image",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false"
+      }
+    },
+    {
+      "name": "prompt:moderate",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false"
+      }
+    },
+    {
+      "name": "apikey:create",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false"
+      }
+    },
+    {
+      "name": "admin:manage_taxonomy",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false"
+      }
+    },
+    {
+      "name": "admin:manage_users",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false"
+      }
+    },
+    {
+      "name": "admin:read_audit",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false"
+      }
+    },
+    {
+      "name": "gallery-defaults",
+      "description": "Claims required by the Gallery API — assigned to all clients including DCR",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "false",
+        "display.on.consent.screen": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "sub",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-sub-mapper",
+          "consentRequired": false,
+          "config": {
+            "access.token.claim": "true",
+            "id.token.claim": "true"
+          }
+        },
+        {
+          "name": "gallery-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "prompt-gallery-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        },
+        {
+          "name": "realm-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "multivalued": "true",
+            "userinfo.token.claim": "false",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "claim.name": "realm_access.roles",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "name": "org-id",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "org_id",
+            "claim.name": "org_id",
+            "jsonType.label": "String",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "userinfo.token.claim": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "roles": {
+    "realm": [
+      {
+        "name": "prompt:read",
+        "composite": false
+      },
+      {
+        "name": "prompt:read:restricted",
+        "composite": false
+      },
+      {
+        "name": "prompt:create",
+        "composite": false
+      },
+      {
+        "name": "prompt:write",
+        "composite": false
+      },
+      {
+        "name": "prompt:publish",
+        "composite": false
+      },
+      {
+        "name": "prompt:publish:public",
+        "composite": false
+      },
+      {
+        "name": "prompt:rate",
+        "composite": false
+      },
+      {
+        "name": "prompt:image",
+        "composite": false
+      },
+      {
+        "name": "prompt:moderate",
+        "composite": false
+      },
+      {
+        "name": "apikey:create",
+        "composite": false
+      },
+      {
+        "name": "admin:manage_taxonomy",
+        "composite": false
+      },
+      {
+        "name": "admin:manage_users",
+        "composite": false
+      },
+      {
+        "name": "admin:read_audit",
+        "composite": false
+      },
+      {
+        "name": "viewer",
+        "description": "Read-only: prompt:read + apikey:create",
+        "composite": true,
+        "composites": {
+          "realm": [
+            "prompt:read",
+            "apikey:create"
+          ]
+        }
+      },
+      {
+        "name": "contributor",
+        "description": "viewer + prompt:read:restricted prompt:create prompt:write prompt:rate prompt:image",
+        "composite": true,
+        "composites": {
+          "realm": [
+            "viewer",
+            "prompt:read:restricted",
+            "prompt:create",
+            "prompt:write",
+            "prompt:rate",
+            "prompt:image"
+          ]
+        }
+      },
+      {
+        "name": "publisher",
+        "description": "contributor + prompt:publish",
+        "composite": true,
+        "composites": {
+          "realm": [
+            "contributor",
+            "prompt:publish"
+          ]
+        }
+      },
+      {
+        "name": "admin",
+        "description": "publisher + prompt:publish:public prompt:moderate admin:*",
+        "composite": true,
+        "composites": {
+          "realm": [
+            "publisher",
+            "prompt:publish:public",
+            "prompt:moderate",
+            "admin:manage_taxonomy",
+            "admin:manage_users",
+            "admin:read_audit"
+          ]
+        }
+      },
+      {
+        "name": "organization-admin",
+        "description": "Gallery-facing flag role (v1 only): drives is_org_admin / draft-visibility in gallery code. Does NOT grant scoped Keycloak admin-console access — real per-Organisation delegated admin is deferred. See ADR 0003 correction, ADR 0007, and CONTEXT.md.",
+        "composite": false
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "gallery-api",
+      "description": "Gallery API resource server — validates bearer tokens only, issues none.",
+      "enabled": true,
+      "publicClient": false,
+      "bearerOnly": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false
+    },
+    {
+      "clientId": "gallery-app",
+      "description": "First-party gallery SPA — authorization-code + PKCE (S256) only.",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "https://gallery.example.org/*"
+      ],
+      "webOrigins": [
+        "https://gallery.example.org"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "+"
+      },
+      "defaultClientScopes": [
+        "profile",
+        "email",
+        "gallery-defaults"
+      ],
+      "optionalClientScopes": [
+        "prompt:read",
+        "prompt:read:restricted",
+        "prompt:create",
+        "prompt:write",
+        "prompt:publish",
+        "prompt:publish:public",
+        "prompt:rate",
+        "prompt:image",
+        "prompt:moderate",
+        "apikey:create",
+        "admin:manage_taxonomy",
+        "admin:manage_users",
+        "admin:read_audit"
+      ]
+    }
+  ],
+  "organizations": [
+    {
+      "name": "gallery-ops",
+      "alias": "gallery-ops",
+      "enabled": true,
+      "description": "Gallery Operators — realm operator Organisation. Members (Gallery Ops admin accounts) are created post-import via the production runbook, not seeded here.",
+      "attributes": {},
+      "domains": []
+    }
+  ]
+}
