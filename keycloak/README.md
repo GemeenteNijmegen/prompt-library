@@ -79,6 +79,12 @@ docker run --rm -p 8081:8080 \
   quay.io/keycloak/keycloak:26.6.2 start-dev --import-realm --features=organization
 ```
 
+`keycloak/verify-prod-realm.sh` wraps this: it runs structural assertions on the
+JSON (no Docker needed — `--offline`), prints the exact `docker run` command
+(`--print-docker`), and once the scratch instance is up it asserts the imported
+Gallery Ops flow via the admin REST API and provisions a test user for the manual
+passkey/TOTP steps. See [Verifying the Gallery Ops flow](#verifying-the-gallery-ops-flow) below.
+
 Before deploying, replace the placeholder `gallery-app` redirect URI / web origin (`https://gallery.example.org`) with the real production SPA origin.
 
 ---
@@ -110,6 +116,27 @@ The two credential branches are **alternatives, not layers**: a passkey satisfie
 ### Operational rule: at least 2 Gallery Ops admin accounts, always
 
 `admin`-holding Gallery Ops accounts have no email-based self-service reset (`resetPasswordAllowed: false`, no SMTP) and no lower-level break-glass. **The realm must have ≥2 Gallery Ops admin accounts at all times.** If an operator loses *both* their passkey and their TOTP device, recovery is a **second Gallery Ops admin resetting their credentials via the Admin Console** — there is no other recovery path. Account creation itself is covered by the bootstrap runbook, not here.
+
+### Verifying the Gallery Ops flow
+
+`keycloak/verify-prod-realm.sh` automates every check that can be done from the CLI, leaving only the genuinely browser-bound steps (registering a passkey, entering a TOTP code) to a human.
+
+```bash
+# Offline — structural assertions on the JSON, no Docker/network. Runs in CI too.
+keycloak/verify-prod-realm.sh --offline
+
+# Full run — start the scratch instance (see command above), then:
+keycloak/verify-prod-realm.sh
+```
+
+The offline layer asserts the flow shape, the `browserFlow` binding, the WebAuthn passwordless policy, and that no flow description exceeds Keycloak's 255-char `DESCRIPTION` column (an import fails hard above that). When a scratch Keycloak is reachable (`KC_URL`, default `http://localhost:8081`) the script additionally logs in as admin, asserts the *imported* flow matches intent via the REST API, provisions the `opstest` test user with the `CONFIGURE_TOTP` + `webauthn-register-passwordless` required actions, and prints the remaining manual browser steps.
+
+**The manual steps (AC 2 & 3 of #94) still need a human**, because WebAuthn enrollment/login can't be driven headlessly without a browser + virtual authenticator:
+
+- **Virtual authenticator (no hardware key needed):** DevTools (F12) → `⋮` → More tools → **WebAuthn** → Enable virtual authenticator environment → Add authenticator with **Supports resident keys** *and* **Supports user verification** both ON (both are required by the realm policy). Keep DevTools open.
+- **Enroll (also proves password+TOTP, AC 3):** incognito → `http://localhost:8081/realms/gallery/account`, log in as `opstest`. `CONFIGURE_TOTP` fires (click *"Unable to scan?"* for the secret, then `oathtool --totp -b "<SECRET>"` or any authenticator app); then `webauthn-register-passwordless` fires and the virtual authenticator captures the passkey.
+- **Passkey alone (AC 2):** sign out, fresh incognito, log in as `opstest` again — you land in with no password/OTP prompt.
+- **Federated routing (AC 4):** add a throwaway organization with a domain + a dummy IdP, then confirm a user whose email matches that domain is redirected at the `Organization` step instead of reaching the passkey/password branches.
 
 ---
 
