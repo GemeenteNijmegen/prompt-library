@@ -57,9 +57,35 @@ uvicorn src.main:app --reload
 
 ---
 
+## Two realm files — dev vs prod
+
+There are two realm exports in this directory, and they are **not** interchangeable:
+
+| File | Purpose | Imported by |
+|---|---|---|
+| `realm-export.json` | Local dev fixture — plaintext client secrets, seeded users (password `dev`), test Organisations (`org-a`/`org-b`), dev-only clients (`gallery-test-client`, `mcp-inspector`, `org-deploy-example`). | `docker compose --profile keycloak` (this dev stack). |
+| `realm-export.prod.json` | Production **structural** source of truth — client scopes, realm roles (incl. `organization-admin`), the `gallery-api` and `gallery-app` clients, the `gallery-ops` Organisation shell, and realm hardening (`sslRequired`, brute-force, password policy, no self-service reset). Contains **zero** client secrets and **zero** users. | The production runbook (imported by a Gallery Operator into the shared Keycloak instance), **never** by the dev stack. |
+
+The dev compose mounts only `realm-export.json` into Keycloak's import directory, so the prod file is ignored locally — `--import-realm` would otherwise try to import two realms both named `gallery`.
+
+Everything the prod realm deliberately leaves out — the first Gallery Ops admin accounts, per-client generated secrets, Entra federation, the custom Gallery Ops passkey/TOTP auth flow — is provisioned post-import per the runbook, not committed here. See [ADR 0007](../docs/adr/0007-production-realm-config.md) for the full rationale.
+
+To smoke-test the prod file against a throwaway instance (matches the dev Keycloak version):
+
+```bash
+docker run --rm -p 8081:8080 \
+  -e KC_BOOTSTRAP_ADMIN_USERNAME=admin -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
+  -v "$PWD/keycloak/realm-export.prod.json":/opt/keycloak/data/import/realm-export.prod.json:ro \
+  quay.io/keycloak/keycloak:26.6.2 start-dev --import-realm
+```
+
+Before deploying, replace the placeholder `gallery-app` redirect URI / web origin (`https://gallery.example.org`) with the real production SPA origin.
+
+---
+
 ## Editing the realm
 
-**Rule: `keycloak/realm-export.json` is the single source of truth.** Keycloak's storage is ephemeral (H2, wiped on `docker compose down`). Any change you make via the admin UI is lost on next restart unless you re-export and commit the JSON.
+**Rule: `keycloak/realm-export.json` is the single source of truth for local dev.** Keycloak's storage is ephemeral (H2, wiped on `docker compose down`). Any change you make via the admin UI is lost on next restart unless you re-export and commit the JSON. (For production changes, edit `realm-export.prod.json` and re-run the import per the runbook — the dev stack never touches it.)
 
 Workflow:
 
