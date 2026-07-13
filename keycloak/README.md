@@ -64,22 +64,52 @@ There are two realm exports in this directory, and they are **not** interchangea
 | File | Purpose | Imported by |
 |---|---|---|
 | `realm-export.json` | Local dev fixture — plaintext client secrets, seeded users (password `dev`), test Organisations (`org-a`/`org-b`), dev-only clients (`gallery-test-client`, `mcp-inspector`, `org-deploy-example`). | `docker compose --profile keycloak` (this dev stack). |
-| `realm-export.prod.json` | Production **structural** source of truth — client scopes, realm roles (incl. `organization-admin`), the `gallery-api` and `gallery-app` clients, the `gallery-ops` Organisation shell, and realm hardening (`sslRequired`, brute-force, password policy, no self-service reset). Contains **zero** client secrets and **zero** users. | The production runbook (imported by a Gallery Operator into the shared Keycloak instance), **never** by the dev stack. |
+| `realm-export.prod.json` | Production **structural** source of truth — client scopes, realm roles (incl. `organization-admin`), the `gallery-api` and `gallery-app` clients, the `gallery-ops` Organisation shell, the custom **Gallery Ops browser auth flow** (passkey OR password+TOTP, see below), and realm hardening (`sslRequired`, brute-force, password policy, no self-service reset). Contains **zero** client secrets and **zero** users. | The production runbook (imported by a Gallery Operator into the shared Keycloak instance), **never** by the dev stack. |
 
 The dev compose mounts only `realm-export.json` into Keycloak's import directory, so the prod file is ignored locally — `--import-realm` would otherwise try to import two realms both named `gallery`.
 
-Everything the prod realm deliberately leaves out — the first Gallery Ops admin accounts, per-client generated secrets, Entra federation, the custom Gallery Ops passkey/TOTP auth flow — is provisioned post-import per the runbook, not committed here. See [ADR 0007](../docs/adr/0007-production-realm-config.md) for the full rationale.
+Everything the prod realm deliberately leaves out — the first Gallery Ops admin accounts, per-client generated secrets, Entra federation — is provisioned post-import per the runbook, not committed here. (The Gallery Ops passkey/TOTP auth flow itself *is* now committed here as an `authenticationFlows` block — see below.) See [ADR 0007](../docs/adr/0007-production-realm-config.md) for the full rationale.
 
-To smoke-test the prod file against a throwaway instance (matches the dev Keycloak version):
+To smoke-test the prod file against a throwaway instance (matches the dev Keycloak version). The `organization` feature must be enabled or the import fails on the `organization` authenticator in the Gallery Ops flow:
 
 ```bash
 docker run --rm -p 8081:8080 \
   -e KC_BOOTSTRAP_ADMIN_USERNAME=admin -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
   -v "$PWD/keycloak/realm-export.prod.json":/opt/keycloak/data/import/realm-export.prod.json:ro \
-  quay.io/keycloak/keycloak:26.6.2 start-dev --import-realm
+  quay.io/keycloak/keycloak:26.6.2 start-dev --import-realm --features=organization
 ```
 
 Before deploying, replace the placeholder `gallery-app` redirect URI / web origin (`https://gallery.example.org`) with the real production SPA origin.
+
+---
+
+## Gallery Ops login: passkey OR password+TOTP
+
+The realm's `browserFlow` is bound to a custom `gallery-ops-browser` flow (ADR 0007, issue #94). Structure:
+
+```
+gallery-ops-browser (browserFlow)
+├── Cookie                          ALTERNATIVE   — SSO re-entry
+├── Identity Provider Redirector    ALTERNATIVE   — honours kc_idp_hint
+└── gallery-ops-forms               ALTERNATIVE
+    ├── Username Form               REQUIRED      — identity-first (username/email)
+    ├── Organization                REQUIRED      — home-realm discovery: if the email
+    │                                               domain matches an Entra-federated
+    │                                               Organisation, redirect to its IdP and
+    │                                               never reach the steps below
+    └── gallery-ops-credentials     REQUIRED
+        ├── WebAuthn Passwordless    ALTERNATIVE  — passkey, single step
+        └── gallery-ops-password-totp ALTERNATIVE
+            ├── Password Form        REQUIRED     — governed by realm passwordPolicy
+            └── OTP Form             REQUIRED     — TOTP second factor (forces
+                                                    CONFIGURE_TOTP if not yet enrolled)
+```
+
+The two credential branches are **alternatives, not layers**: a passkey satisfies login on its own (it is already MFA-strength); password+TOTP is the recovery-grade alternative. Federated End Users are peeled off by the `Organization` step before any credential prompt, so the flow only ever exercises passkey/password on **local Gallery Ops** accounts.
+
+### Operational rule: at least 2 Gallery Ops admin accounts, always
+
+`admin`-holding Gallery Ops accounts have no email-based self-service reset (`resetPasswordAllowed: false`, no SMTP) and no lower-level break-glass. **The realm must have ≥2 Gallery Ops admin accounts at all times.** If an operator loses *both* their passkey and their TOTP device, recovery is a **second Gallery Ops admin resetting their credentials via the Admin Console** — there is no other recovery path. Account creation itself is covered by the bootstrap runbook, not here.
 
 ---
 
