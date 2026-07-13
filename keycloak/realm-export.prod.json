@@ -16,6 +16,16 @@
   "revokeRefreshToken": true,
   "refreshTokenMaxReuse": 0,
   "organizationsEnabled": true,
+  "browserFlow": "gallery-ops-browser",
+  "webAuthnPolicyPasswordlessRpEntityName": "Prompt Gallery",
+  "webAuthnPolicyPasswordlessRpId": "",
+  "webAuthnPolicyPasswordlessSignatureAlgorithms": ["ES256", "RS256"],
+  "webAuthnPolicyPasswordlessAttestationConveyancePreference": "none",
+  "webAuthnPolicyPasswordlessAuthenticatorAttachment": "not specified",
+  "webAuthnPolicyPasswordlessRequireResidentKey": "Yes",
+  "webAuthnPolicyPasswordlessUserVerificationRequirement": "required",
+  "webAuthnPolicyPasswordlessCreateTimeout": 0,
+  "webAuthnPolicyPasswordlessAvoidSameAuthenticatorRegister": false,
   "defaultDefaultClientScopes": [
     "acr",
     "basic",
@@ -306,6 +316,114 @@
       }
     ]
   },
+  "authenticationFlows": [
+    {
+      "alias": "gallery-ops-browser",
+      "description": "Realm browser flow. Federated End Users are peeled off to their Organisation's Entra IdP by home-realm discovery (Organization authenticator) before any credential step; only local Gallery Ops accounts reach the passkey-OR-(password+TOTP) branches. See ADR 0007 and issue #94.",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "auth-cookie",
+          "authenticatorFlow": false,
+          "requirement": "ALTERNATIVE",
+          "priority": 10,
+          "userSetupAllowed": false
+        },
+        {
+          "authenticator": "identity-provider-redirector",
+          "authenticatorFlow": false,
+          "requirement": "ALTERNATIVE",
+          "priority": 20,
+          "userSetupAllowed": false
+        },
+        {
+          "authenticatorFlow": true,
+          "requirement": "ALTERNATIVE",
+          "priority": 30,
+          "flowAlias": "gallery-ops-forms",
+          "userSetupAllowed": false
+        }
+      ]
+    },
+    {
+      "alias": "gallery-ops-forms",
+      "description": "Identity-first username entry, then home-realm discovery, then local credential branches.",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "auth-username-form",
+          "authenticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "userSetupAllowed": false
+        },
+        {
+          "authenticator": "organization",
+          "authenticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 20,
+          "userSetupAllowed": false
+        },
+        {
+          "authenticatorFlow": true,
+          "requirement": "REQUIRED",
+          "priority": 30,
+          "flowAlias": "gallery-ops-credentials",
+          "userSetupAllowed": false
+        }
+      ]
+    },
+    {
+      "alias": "gallery-ops-credentials",
+      "description": "Two alternative single-step login paths for local Gallery Ops accounts: a passkey on its own, OR password followed by a required TOTP. Not layered — passkey is already MFA-strength; password+TOTP is the recovery-grade alternative.",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "webauthn-authenticator-passwordless",
+          "authenticatorFlow": false,
+          "requirement": "ALTERNATIVE",
+          "priority": 10,
+          "userSetupAllowed": false
+        },
+        {
+          "authenticatorFlow": true,
+          "requirement": "ALTERNATIVE",
+          "priority": 20,
+          "flowAlias": "gallery-ops-password-totp",
+          "userSetupAllowed": false
+        }
+      ]
+    },
+    {
+      "alias": "gallery-ops-password-totp",
+      "description": "Password (governed by realm passwordPolicy) followed by a required TOTP second factor. Both steps REQUIRED; a user without a TOTP credential is forced through CONFIGURE_TOTP on first login.",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "auth-password-form",
+          "authenticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "userSetupAllowed": false
+        },
+        {
+          "authenticator": "auth-otp-form",
+          "authenticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 20,
+          "userSetupAllowed": false
+        }
+      ]
+    }
+  ],
   "clients": [
     {
       "clientId": "gallery-api",
