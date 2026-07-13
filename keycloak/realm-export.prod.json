@@ -319,7 +319,7 @@
   "authenticationFlows": [
     {
       "alias": "gallery-ops-browser",
-      "description": "Realm browser flow. Federated End Users are peeled off to their Organisation's Entra IdP by home-realm discovery (Organization authenticator) before any credential step; only local Gallery Ops accounts reach the passkey-OR-(password+TOTP) branches. See ADR 0007 and issue #94.",
+      "description": "Realm browser flow. Home-realm discovery redirects federated End Users to their Organisation's Entra IdP before any credential step; only local Gallery Ops accounts reach the passkey-OR-(password+TOTP) branches. See ADR 0007, issue #94.",
       "providerId": "basic-flow",
       "topLevel": true,
       "builtIn": false,
