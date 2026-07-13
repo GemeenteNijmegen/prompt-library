@@ -94,15 +94,15 @@ Before deploying, replace the placeholder `gallery-app` redirect URI / web origi
 The realm's `browserFlow` is bound to a custom `gallery-ops-browser` flow (ADR 0007, issue #94). Structure:
 
 ```
-gallery-ops-browser (browserFlow)
+gallery-ops-browser (browserFlow)   — mirrors Keycloak's default browser flow
 ├── Cookie                          ALTERNATIVE   — SSO re-entry
 ├── Identity Provider Redirector    ALTERNATIVE   — honours kc_idp_hint
+├── gallery-ops-organization        ALTERNATIVE   — home-realm discovery, runs before forms
+│   └── (conditional) organization                — if the email domain matches an Entra-
+│                                                   federated Organisation, redirect to its
+│                                                   IdP; otherwise pass through to forms
 └── gallery-ops-forms               ALTERNATIVE
     ├── Username Form               REQUIRED      — identity-first (username/email)
-    ├── Organization                REQUIRED      — home-realm discovery: if the email
-    │                                               domain matches an Entra-federated
-    │                                               Organisation, redirect to its IdP and
-    │                                               never reach the steps below
     └── gallery-ops-credentials     REQUIRED
         ├── WebAuthn Passwordless    ALTERNATIVE  — passkey, single step
         └── gallery-ops-password-totp ALTERNATIVE
@@ -111,7 +111,7 @@ gallery-ops-browser (browserFlow)
                                                     CONFIGURE_TOTP if not yet enrolled)
 ```
 
-The two credential branches are **alternatives, not layers**: a passkey satisfies login on its own (it is already MFA-strength); password+TOTP is the recovery-grade alternative. Federated End Users are peeled off by the `Organization` step before any credential prompt, so the flow only ever exercises passkey/password on **local Gallery Ops** accounts.
+The two credential branches are **alternatives, not layers**: a passkey satisfies login on its own (it is already MFA-strength); password+TOTP is the recovery-grade alternative. The `gallery-ops-organization` subflow is a sibling of `forms` that runs **first** (exactly as Keycloak's built-in `Organization` → `Browser - Conditional Organization` structure): federated End Users are peeled off to their Entra IdP there, so `forms` only ever exercises passkey/password on **local Gallery Ops** accounts. Placing the `organization` authenticator as a bare `REQUIRED` step inside the credential path instead will abort login for local users (they have no IdP to route to) — see #94's history.
 
 ### Operational rule: at least 2 Gallery Ops admin accounts, always
 

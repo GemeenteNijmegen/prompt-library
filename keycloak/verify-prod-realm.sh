@@ -34,7 +34,8 @@ KC_ADMIN="${KC_ADMIN:-admin}"
 KC_ADMIN_PW="${KC_ADMIN_PW:-admin}"
 REALM="${REALM:-gallery}"
 TEST_USER="${TEST_USER:-opstest}"
-TEST_USER_PW="${TEST_USER_PW:-Op\$Test-2026x}"
+# Shell-safe (no $, quotes) and policy-valid: len>=12, upper/lower/digit/special, != username.
+TEST_USER_PW="${TEST_USER_PW:-Passw0rd-2026x}"
 KC_IMAGE="${KC_IMAGE:-quay.io/keycloak/keycloak:26.6.2}"
 
 green() { printf '\033[32m✓ %s\033[0m\n' "$1"; }
@@ -97,12 +98,24 @@ top = reqs("gallery-ops-browser")
 check(top.get("auth-cookie") == "ALTERNATIVE", "browser: Cookie is ALTERNATIVE")
 check(top.get("identity-provider-redirector") == "ALTERNATIVE",
       "browser: Identity Provider Redirector is ALTERNATIVE")
+# Organization subflow must be an ALTERNATIVE sibling *before* forms (mirrors Keycloak's
+# default browser flow) so federated users are routed before the local credential path.
+check(top.get("gallery-ops-organization") == "ALTERNATIVE", "browser: Organization subflow is ALTERNATIVE")
 check(top.get("gallery-ops-forms") == "ALTERNATIVE", "browser: forms subflow is ALTERNATIVE")
+
+org = reqs("gallery-ops-organization")
+check(org.get("gallery-ops-conditional-organization") == "CONDITIONAL",
+      "organization: conditional-organization wrapper is CONDITIONAL")
+condorg = reqs("gallery-ops-conditional-organization")
+check(condorg.get("conditional-user-configured") == "REQUIRED",
+      "conditional-organization: user-configured condition REQUIRED")
+check(condorg.get("organization") == "ALTERNATIVE",
+      "conditional-organization: organization authenticator ALTERNATIVE")
 
 forms = reqs("gallery-ops-forms")
 check(forms.get("auth-username-form") == "REQUIRED", "forms: identity-first Username Form REQUIRED")
-check(forms.get("organization") == "REQUIRED",
-      "forms: Organization (home-realm discovery) present before credentials")
+check("organization" not in forms,
+      "forms: no bare organization step (it lives in the Organization subflow, not the credential path)")
 check(forms.get("gallery-ops-credentials") == "REQUIRED", "forms: credentials subflow REQUIRED")
 
 cred = reqs("gallery-ops-credentials")
@@ -165,8 +178,8 @@ live_checks() {
   }
   assert_exec auth-cookie ALTERNATIVE
   assert_exec identity-provider-redirector ALTERNATIVE
+  assert_exec organization ALTERNATIVE
   assert_exec auth-username-form REQUIRED
-  assert_exec organization REQUIRED
   assert_exec webauthn-authenticator-passwordless ALTERNATIVE
   assert_exec auth-password-form REQUIRED
   assert_exec auth-otp-form REQUIRED
@@ -174,20 +187,43 @@ live_checks() {
   # Provision (or refresh) the test user with the enrollment required actions.
   local uid; uid="$(auth "$api/users?username=$TEST_USER&exact=true" | jq -r '.[0].id // empty')"
   local body
-  body="$(jq -n --arg u "$TEST_USER" --arg pw "$TEST_USER_PW" '{
+  body="$(jq -n --arg u "$TEST_USER" '{
     username:$u, email:($u+"@gallery.local"), enabled:true, emailVerified:true,
-    requiredActions:["CONFIGURE_TOTP","webauthn-register-passwordless"],
-    credentials:[{type:"password", value:$pw, temporary:false}]
+    requiredActions:["CONFIGURE_TOTP","webauthn-register-passwordless"]
   }')"
   if [ -z "$uid" ]; then
     curl -fsS -X POST "$api/users" -H "Authorization: Bearer $tok" \
       -H "Content-Type: application/json" -d "$body" >/dev/null
-    green "created test user '$TEST_USER'"
+    uid="$(auth "$api/users?username=$TEST_USER&exact=true" | jq -r '.[0].id')"
+    green "created test user '$TEST_USER' ($uid)"
   else
     curl -fsS -X PUT "$api/users/$uid" -H "Authorization: Bearer $tok" \
       -H "Content-Type: application/json" -d "$body" >/dev/null
-    green "refreshed existing test user '$TEST_USER'"
+    green "refreshed existing test user '$TEST_USER' ($uid)"
   fi
+
+  # Password via the dedicated reset-password endpoint (more reliable than inline
+  # credentials on create, and surfaces policy rejections as a non-2xx).
+  curl -fsS -X PUT "$api/users/$uid/reset-password" -H "Authorization: Bearer $tok" \
+    -H "Content-Type: application/json" \
+    -d "$(jq -n --arg pw "$TEST_USER_PW" '{type:"password", value:$pw, temporary:false}')" >/dev/null
+  green "set password (reset-password)"
+
+  # Gallery Ops accounts are members of the gallery-ops Organisation. Without this the
+  # identity-first step resolves the user but the flow has no org context — add it so the
+  # login path matches production. Ignore 409 (already a member).
+  local orgid; orgid="$(auth "$api/organizations" | jq -r '.[0].id // empty')"
+  if [ -n "$orgid" ]; then
+    curl -fsS -X POST "$api/organizations/$orgid/members" -H "Authorization: Bearer $tok" \
+      -H "Content-Type: application/json" -d "\"$uid\"" >/dev/null 2>&1 \
+      && green "added '$TEST_USER' to gallery-ops organization" \
+      || info "'$TEST_USER' already a gallery-ops member (or add skipped)"
+  fi
+
+  # Clear any brute-force lock from prior failed attempts (a locked account looks like a
+  # wrong password at the login screen).
+  curl -fsS -X DELETE "$api/attack-detection/brute-force/users/$uid" \
+    -H "Authorization: Bearer $tok" >/dev/null 2>&1 || true
 
   cat <<EOF
 
@@ -207,10 +243,17 @@ live_checks() {
    (or "Sign in with a passkey"). You should land in with NO password/OTP prompt
    → proves AC 2 (passkey alone).
 
+NOTE: on http://localhost the account-console *page* may 403 on
+'?userProfileMetadata=true' right after login. That is a token-audience quirk of
+Keycloak's own account console under this realm's gallery-defaults scope — it does
+NOT affect the login itself and does not occur for gallery-app in production.
+Confirm success from the server log instead: a good login emits
+type="LOGIN" (not "LOGIN_ERROR") for username="$TEST_USER".
+
 AC 4 (federated users never reach this flow): add a throwaway organization with a
-domain + a dummy IdP in the admin console, then confirm a user whose email matches
-that domain is redirected at the Organization step instead of being asked for a
-passkey/password.
+verified domain + a linked (dummy) IdP in the admin console, then confirm a user
+whose email matches that domain is redirected at the Organization step instead of
+being asked for a passkey/password.
 ─────────────────────────────────────────────────────────────────────────────
 EOF
 }
