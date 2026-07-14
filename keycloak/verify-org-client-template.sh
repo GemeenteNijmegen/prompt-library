@@ -260,6 +260,26 @@ PY
   fi
 }
 
+# Portable HTML/URL helpers (BSD/macOS grep lacks -P). All read stdin.
+form_action() {  # print the login form's action URL, html-unescaped
+  python3 -c '
+import sys, re, html
+h = sys.stdin.read()
+m = re.search(r"id=\"kc-form-login\"[^>]*action=\"([^\"]+)\"", h) or re.search(r"action=\"([^\"]+)\"", h)
+print(html.unescape(m.group(1)) if m else "")'
+}
+loc_code() {  # print the ?code= value from a redirect URL, if any
+  python3 -c 'import sys,re;m=re.search(r"[?&]code=([^&\s]+)",sys.stdin.read());print(m.group(1) if m else "")'
+}
+kc_error() {  # best-effort: surface a Keycloak login error/feedback message
+  python3 -c '
+import sys, re, html
+h = sys.stdin.read()
+m = (re.search(r"kc-feedback-text[^>]*>([^<]+)<", h)
+     or re.search(r"id=\"input-error[^\"]*\"[^>]*>([^<]+)<", h))
+print(html.unescape(m.group(1).strip()) if m else "")'
+}
+
 # Runs the auth-code+PKCE dance with curl and asserts token claims.
 # Returns non-zero (without exiting the script) so the caller can print a manual fallback.
 auth_code_pkce_flow() {
@@ -272,8 +292,9 @@ auth_code_pkce_flow() {
   challenge="$(python3 -c 'import hashlib,base64,sys;print(base64.urlsafe_b64encode(hashlib.sha256(sys.argv[1].encode()).digest()).rstrip(b"=").decode())' "$verifier")"
   state="$(python3 -c 'import secrets;print(secrets.token_urlsafe(8))')"
 
-  # 1. GET the login page; capture the form action URL.
-  local page action
+  # 1. GET the login page; capture the first form's action URL.
+  local page action hdr body location code="" step=0
+  hdr="$(mktemp)"; body="$(mktemp)"
   page="$(curl -sS -c "$jar" -b "$jar" -G "$authz" \
     --data-urlencode "client_id=$T_CLIENT_ID" \
     --data-urlencode "response_type=code" \
@@ -281,28 +302,37 @@ auth_code_pkce_flow() {
     --data-urlencode "redirect_uri=$T_REDIRECT" \
     --data-urlencode "state=$state" \
     --data-urlencode "code_challenge=$challenge" \
-    --data-urlencode "code_challenge_method=S256")" || { rm -f "$jar"; return 1; }
-  # Portable extraction (no grep -P — BSD/macOS grep lacks it): pull the login form's
-  # action URL from the HTML and html-unescape it.
-  action="$(printf '%s' "$page" | python3 -c '
-import sys, re, html
-h = sys.stdin.read()
-m = re.search(r"id=\"kc-form-login\"[^>]*action=\"([^\"]+)\"", h) or re.search(r"action=\"([^\"]+)\"", h)
-print(html.unescape(m.group(1)) if m else "")')"
-  [ -n "$action" ] || { info "could not find login form action in auth page"; rm -f "$jar"; return 1; }
+    --data-urlencode "code_challenge_method=S256")" || { rm -f "$jar" "$hdr" "$body"; return 1; }
+  action="$(printf '%s' "$page" | form_action)"
+  [ -n "$action" ] || { info "could not find login form action in auth page"; rm -f "$jar" "$hdr" "$body"; return 1; }
 
-  # 2. POST credentials; the success redirect (302) carries ?code=... in Location.
-  local location code
-  location="$(curl -sS -c "$jar" -b "$jar" -D - -o /dev/null "$action" \
-    --data-urlencode "username=$T_USER" --data-urlencode "password=$T_USER_PW" \
-    | tr -d '\r' | awk 'tolower($1)=="location:"{print $2; exit}')"
-  code="$(printf '%s' "$location" | python3 -c '
-import sys, re
-m = re.search(r"[?&]code=([^&\s]+)", sys.stdin.read())
-print(m.group(1) if m else "")')"
-  rm -f "$jar"
-  [ -n "$code" ] || { info "login did not yield an authorization code (location: ${location:-none})"; return 1; }
-  green "obtained authorization code"
+  # 2. Post credentials. A realm with organizations enabled uses identity-first login
+  #    (username page, THEN a separate password page), so drive up to a few form steps
+  #    — sending username+password each time (each form ignores the field it doesn't
+  #    need) — until the redirect back to redirect_uri carries ?code=.
+  while [ -z "$code" ] && [ "$step" -lt 4 ]; do
+    step=$((step + 1))
+    curl -sS -c "$jar" -b "$jar" -D "$hdr" -o "$body" "$action" \
+      --data-urlencode "username=$T_USER" --data-urlencode "password=$T_USER_PW" >/dev/null
+    location="$(tr -d '\r' < "$hdr" | awk 'tolower($1)=="location:"{print $2; exit}')"
+    if [ -n "$location" ]; then
+      code="$(printf '%s' "$location" | loc_code)"
+      [ -n "$code" ] && break
+      page="$(curl -sS -c "$jar" -b "$jar" "$location")"   # next step within the flow
+    else
+      page="$(cat "$body")"                                # 200 re-render (next step / error)
+    fi
+    local next; next="$(printf '%s' "$page" | form_action)"
+    { [ -z "$next" ] || [ "$next" = "$action" ]; } && break
+    action="$next"
+  done
+  if [ -z "$code" ]; then
+    local err; err="$(printf '%s' "$page" | kc_error)"
+    info "login did not yield an authorization code after $step step(s)${err:+ — Keycloak said: $err}"
+    rm -f "$jar" "$hdr" "$body"; return 1
+  fi
+  rm -f "$jar" "$hdr" "$body"
+  green "obtained authorization code (in $step form step(s))"
 
   # 3. Exchange code + verifier + client secret for tokens.
   local tokresp access
