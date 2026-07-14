@@ -133,10 +133,16 @@ admin_token() {
 }
 
 # Globals populated during live_checks so the EXIT trap can clean up.
-TOK=""; API=""; CLIENT_UUID=""; USER_UUID=""; ORIG_BROWSER_FLOW=""
+TOK=""; API=""; CLIENT_UUID=""; USER_UUID=""; ORIG_BROWSER_FLOW=""; KEEP_STATE=""
 
 cleanup() {
   [ -n "$TOK" ] || return 0
+  # On a scripted-flow failure we KEEP the client, user, and the simple "browser" flow
+  # so the printed manual fallback is actually runnable; print_manual explains teardown.
+  if [ -n "$KEEP_STATE" ]; then
+    info "left test client/user and browserFlow='browser' in place for the manual fallback"
+    return 0
+  fi
   # Restore the realm browser flow first (most important — never leave a scratch realm
   # on the wrong flow), then remove the throwaway client/user.
   if [ -n "$ORIG_BROWSER_FLOW" ]; then
@@ -225,8 +231,12 @@ PY
   # meaningful. prompt:read (default-ish) + two optional verbs.
   local roles=(prompt:read prompt:write prompt:rate)
   local ubody
+  # firstName/lastName are required by the realm's default user profile — without them
+  # login succeeds but Keycloak diverts to a VERIFY_PROFILE required-action form, which
+  # the scripted flow can't complete. Set them (and no requiredActions) up front.
   ubody="$(jq -n --arg u "$T_USER" '{
-    username:$u, email:($u+"@acme.example.com"), enabled:true, emailVerified:true,
+    username:$u, email:($u+"@acme.example.com"), firstName:"Org", lastName:"User",
+    enabled:true, emailVerified:true, requiredActions:[],
     attributes:{org_id:["acme-org-verify"]}
   }')"
   curl -fsS -X POST "$API/users" -H "Authorization: Bearer $TOK" \
@@ -256,6 +266,7 @@ PY
     green "AUTH-CODE + PKCE token inspection passed (AC 2 & AC 3)"
   else
     red "scripted auth-code flow did not complete — falling back to manual steps"
+    KEEP_STATE=1   # keep client/user + simple browser flow so the manual link works
     print_manual "$secret"
   fi
 }
@@ -432,6 +443,12 @@ scripted here. Drive it by hand (values below are concrete — nothing to expand
 
   Expect: aud contains "prompt-gallery-api", azp="$T_CLIENT_ID", and
   realm_access.roles holds the user's granted verbs (prompt:read/write/rate).
+
+The test client '$T_CLIENT_ID', user '$T_USER', and browserFlow='browser' were
+LEFT in place so the URL above works. When done, tear them down:
+  admin console → delete client '$T_CLIENT_ID' and user '$T_USER', and set
+  Realm settings → Authentication → bind 'browser flow' back to '$ORIG_BROWSER_FLOW'
+  (or just discard the scratch container).
 ──────────────────────────────────────────────────────────────────────────────
 EOF
 }
