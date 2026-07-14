@@ -1,0 +1,69 @@
+{
+  "_comment": [
+    "TEMPLATE — NOT an importable realm fragment and NOT part of realm-export.prod.json.",
+    "Copy this block, replace every {{PLACEHOLDER}}, then create ONE client per chat client",
+    "the customer Organisation deploys, via the Admin Console or the Admin REST API",
+    "(POST /admin/realms/gallery/clients). This is ADR 0004 step 5 / ADR 0007's onboarding aid.",
+    "",
+    "CONSISTENCY AID, NOT A SECURITY BOUNDARY (ADR 0004 Revision 3): the optionalClientScopes",
+    "list below does NOT gate what ends up in a token. Effective permissions come from the roles",
+    "the End User holds (realm_access.roles, populated by the always-on gallery-defaults scope) —",
+    "the prompt:* client scopes carry no mappers and filter nothing. Keeping admin:* /",
+    "prompt:moderate / prompt:publish:public OUT of the list matches documented intent but is not",
+    "technically enforced; no customer End User is ever granted those roles, so no org-deployed",
+    "client can carry them regardless of what it requests.",
+    "",
+    "The gallery-audience (aud=prompt-gallery-api), realm_access.roles, sub and org_id claims all",
+    "ride on the gallery-defaults scope, which is a realm default scope and is therefore attached",
+    "automatically. It is also listed explicitly under defaultClientScopes below so this template",
+    "is self-contained and correct even if the realm defaults ever change.",
+    "",
+    "Placeholders to fill:",
+    "  {{CLIENT_ID}}     - stable client id, e.g. acme-copilot   (one per deployed chat client)",
+    "  {{ORG_SLUG}}      - the customer Organisation's slug, e.g. acme   (label/description only)",
+    "  {{REDIRECT_URIS}} - the deployment's OAuth redirect URI(s). Replace the single array entry",
+    "                      with one string per URI, e.g. \"https://acme.example.com/oauth/callback\".",
+    "  {{WEB_ORIGINS}}   - CORS web origin(s) for the SPA/chat client, or [] if not browser-based.",
+    "",
+    "Do NOT add a \"secret\" key — Keycloak generates the confidential secret on creation; retrieve",
+    "it out-of-band (Admin Console → Credentials, or GET .../clients/{id}/client-secret) and hand",
+    "it to the deployment team over a secure channel. This _comment key is ignored by Keycloak's",
+    "import/create; delete it if your tooling rejects unknown properties."
+  ],
+  "clientId": "{{CLIENT_ID}}",
+  "name": "{{ORG_SLUG}} deployed chat client",
+  "description": "Org-deployed confidential OAuth client for Organisation '{{ORG_SLUG}}'. Authorization-code + PKCE (S256). Created per ADR 0004 step 5 from keycloak/templates/org-deployed-client.json.",
+  "enabled": true,
+  "protocol": "openid-connect",
+  "publicClient": false,
+  "standardFlowEnabled": true,
+  "implicitFlowEnabled": false,
+  "directAccessGrantsEnabled": false,
+  "serviceAccountsEnabled": false,
+  "frontchannelLogout": true,
+  "redirectUris": [
+    "{{REDIRECT_URIS}}"
+  ],
+  "webOrigins": [
+    "{{WEB_ORIGINS}}"
+  ],
+  "attributes": {
+    "pkce.code.challenge.method": "S256",
+    "post.logout.redirect.uris": "+"
+  },
+  "defaultClientScopes": [
+    "profile",
+    "email",
+    "gallery-defaults",
+    "prompt:read"
+  ],
+  "optionalClientScopes": [
+    "prompt:read:restricted",
+    "prompt:create",
+    "prompt:write",
+    "prompt:publish",
+    "prompt:rate",
+    "prompt:image",
+    "apikey:create"
+  ]
+}
