@@ -226,7 +226,17 @@ PY
     && green "generated client secret retrievable (len ${#secret})" \
     || { red "could not retrieve generated secret"; exit 1; }
 
-  # --- Provision a role-bearing test user in the gallery-ops... no, a plain user ----
+  # Keycloak 26's declarative user profile drops attributes it doesn't know about, so the
+  # custom org_id (which the gallery-defaults 'org-id' mapper reads into the token) would be
+  # silently discarded on user create. Enable unmanaged attributes on this scratch realm so
+  # an admin-set org_id persists. (Throwaway realm — no restore needed.)
+  local prof; prof="$(auth "$API/users/profile")"
+  printf '%s' "$prof" | jq '.unmanagedAttributePolicy="ENABLED"' \
+    | curl -fsS -X PUT "$API/users/profile" -H "Authorization: Bearer $TOK" \
+      -H "Content-Type: application/json" -d @- >/dev/null \
+    && green "enabled unmanaged user attributes (so org_id persists)"
+
+  # --- Provision a role-bearing test user (a plain federated-style End User) ----------
   # Assign a representative permission-role set so the token's realm_access.roles is
   # meaningful. prompt:read (default-ish) + two optional verbs.
   local roles=(prompt:read prompt:write prompt:rate)
