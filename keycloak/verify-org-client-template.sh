@@ -261,12 +261,22 @@ PY
 }
 
 # Portable HTML/URL helpers (BSD/macOS grep lacks -P). All read stdin.
-form_action() {  # print the login form's action URL, html-unescaped
+form_action() {  # print the action URL of the form that actually holds a credential field
   python3 -c '
 import sys, re, html
 h = sys.stdin.read()
-m = re.search(r"id=\"kc-form-login\"[^>]*action=\"([^\"]+)\"", h) or re.search(r"action=\"([^\"]+)\"", h)
-print(html.unescape(m.group(1)) if m else "")'
+fallback = None
+for m in re.finditer(r"<form\b([^>]*)>(.*?)</form>", h, re.S | re.I):
+    attrs, inner = m.group(1), m.group(2)
+    am = re.search(r"action=\"([^\"]+)\"", attrs)
+    if not am:
+        continue
+    action = html.unescape(am.group(1))
+    if fallback is None:
+        fallback = action
+    if re.search(r"name=\"(username|password)\"", inner) or "type=\"password\"" in inner:
+        print(action); sys.exit(0)
+print(fallback or "")'
 }
 loc_code() {  # print the ?code= value from a redirect URL, if any
   python3 -c 'import sys,re;m=re.search(r"[?&]code=([^&\s]+)",sys.stdin.read());print(m.group(1) if m else "")'
@@ -312,9 +322,14 @@ auth_code_pkce_flow() {
   #    need) — until the redirect back to redirect_uri carries ?code=.
   while [ -z "$code" ] && [ "$step" -lt 4 ]; do
     step=$((step + 1))
+    [ -n "${DEBUG:-}" ] && info "step $step: POST → $action"
     curl -sS -c "$jar" -b "$jar" -D "$hdr" -o "$body" "$action" \
       --data-urlencode "username=$T_USER" --data-urlencode "password=$T_USER_PW" >/dev/null
     location="$(tr -d '\r' < "$hdr" | awk 'tolower($1)=="location:"{print $2; exit}')"
+    if [ -n "${DEBUG:-}" ]; then
+      info "step $step: status $(awk 'NR==1{print $2}' "$hdr"), location=${location:-none}"
+      [ -z "$location" ] && info "step $step: page error: $(kc_error < "$body")"
+    fi
     if [ -n "$location" ]; then
       code="$(printf '%s' "$location" | loc_code)"
       [ -n "$code" ] && break
