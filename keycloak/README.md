@@ -68,7 +68,7 @@ There are two realm exports in this directory, and they are **not** interchangea
 
 The dev compose mounts only `realm-export.json` into Keycloak's import directory, so the prod file is ignored locally — `--import-realm` would otherwise try to import two realms both named `gallery`.
 
-Everything the prod realm deliberately leaves out — the first Gallery Ops admin accounts, per-client generated secrets, Entra federation — is provisioned post-import per the runbook, not committed here. (The Gallery Ops passkey/TOTP auth flow itself *is* now committed here as an `authenticationFlows` block — see below.) See [ADR 0007](../docs/adr/0007-production-realm-config.md) for the full rationale.
+Everything the prod realm deliberately leaves out — the first Gallery Ops admin accounts, per-client generated secrets, Entra federation — is provisioned post-import per the runbook, not committed here. That runbook is **[PRODUCTION.md](PRODUCTION.md)**: import, create ≥2 Gallery Ops admins by hand, enrol their credentials, verify login, and the ≥2-admins / second-admin-recovery operational rules. (The Gallery Ops passkey/TOTP auth flow itself *is* now committed here as an `authenticationFlows` block — see below.) See [ADR 0007](../docs/adr/0007-production-realm-config.md) for the full rationale.
 
 To smoke-test the prod file against a throwaway instance (matches the dev Keycloak version). The `organization` feature must be enabled or the import fails on the `organization` authenticator in the Gallery Ops flow:
 
@@ -129,7 +129,7 @@ The two credential branches are **alternatives, not layers**: a passkey satisfie
 
 ### Operational rule: at least 2 Gallery Ops admin accounts, always
 
-`admin`-holding Gallery Ops accounts have no email-based self-service reset (`resetPasswordAllowed: false`, no SMTP) and no lower-level break-glass. **The realm must have ≥2 Gallery Ops admin accounts at all times.** If an operator loses *both* their passkey and their TOTP device, recovery is a **second Gallery Ops admin resetting their credentials via the Admin Console** — there is no other recovery path. Account creation itself is covered by the bootstrap runbook, not here.
+`admin`-holding Gallery Ops accounts have no email-based self-service reset (`resetPasswordAllowed: false`, no SMTP) and no lower-level break-glass. **The realm must have ≥2 Gallery Ops admin accounts at all times.** If an operator loses *both* their passkey and their TOTP device, recovery is a **second Gallery Ops admin resetting their credentials via the Admin Console** — there is no other recovery path. Account creation and the step-by-step recovery procedure are covered by the bootstrap runbook, **[PRODUCTION.md](PRODUCTION.md)**, not here.
 
 ### Verifying the Gallery Ops flow
 
