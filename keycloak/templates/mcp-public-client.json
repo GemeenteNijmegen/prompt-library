@@ -1,0 +1,74 @@
+{
+  "_comment": [
+    "TEMPLATE — NOT part of realm-export.prod.json. Register ONE of these so a native/",
+    "loopback MCP client (MCP Inspector, mcp-remote, Claude Desktop connector, VS Code MCP)",
+    "can complete authorization-code + PKCE against the gallery realm. This is the OAuth",
+    "*client* the MCP tool authenticates as; the gallery_mcp sidecar is the resource server.",
+    "See gallery_mcp/README.md and ADR 0004 / ADR 0005.",
+    "",
+    "PUBLIC client, not confidential: native MCP clients are public apps and cannot keep a",
+    "secret. Security rests on PKCE-S256 + exact redirect-URI matching, NOT a client_secret.",
+    "(The org-deployed-client.json template is the OTHER shape — confidential, for server-side",
+    "chat clients that CAN hold a secret. Do not confuse the two.)",
+    "",
+    "WHY NOT DYNAMIC CLIENT REGISTRATION: the MCP spec would have the client self-register at",
+    "Keycloak's registration_endpoint. v1 does NOT enable DCR (ADR 0004 — it's the upgrade",
+    "path), so you pre-register this ONE static client and configure its client_id into the",
+    "MCP tool. An MCP client that ONLY supports DCR cannot connect until DCR is enabled.",
+    "",
+    "REDIRECT URIs: loopback apps listen on an ephemeral port, so a single fixed URI rarely",
+    "matches. Options, in order of preference:",
+    "  - Pin the port in the client (e.g. `mcp-remote --callback-port 6274`) and register the",
+    "    exact URI, e.g. \"http://127.0.0.1:6274/oauth/callback\".",
+    "  - Or keep the wildcard entries below. Keycloak matches redirect URIs literally with an",
+    "    optional trailing `*`; the port is part of the match. If login fails with",
+    "    `invalid_redirect_uri`, Keycloak's error page shows the exact URI the client tried —",
+    "    add that string here verbatim (with a trailing /* ) and retry.",
+    "The entries below cover MCP Inspector's default (6274) and bare loopback hosts.",
+    "",
+    "The gallery-defaults scope (default on every client) supplies aud=prompt-gallery-api,",
+    "org_id, sub and realm_access.roles automatically. prompt:read is a default scope so the",
+    "read-only MVP tools work with a plain login and no extra scope requests.",
+    "",
+    "Delete this _comment key if your import tooling rejects unknown properties."
+  ],
+  "clientId": "mcp-client",
+  "name": "MCP client (native / loopback)",
+  "description": "Public authorization-code + PKCE (S256) client for native MCP tools connecting through the gallery_mcp sidecar. Pre-registered per ADR 0004 (no DCR in v1).",
+  "enabled": true,
+  "protocol": "openid-connect",
+  "publicClient": true,
+  "standardFlowEnabled": true,
+  "implicitFlowEnabled": false,
+  "directAccessGrantsEnabled": false,
+  "serviceAccountsEnabled": false,
+  "frontchannelLogout": true,
+  "redirectUris": [
+    "http://localhost:6274/*",
+    "http://127.0.0.1:6274/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "webOrigins": [
+    "+"
+  ],
+  "attributes": {
+    "pkce.code.challenge.method": "S256",
+    "post.logout.redirect.uris": "+"
+  },
+  "defaultClientScopes": [
+    "profile",
+    "email",
+    "gallery-defaults",
+    "prompt:read"
+  ],
+  "optionalClientScopes": [
+    "prompt:read:restricted",
+    "prompt:create",
+    "prompt:write",
+    "prompt:publish",
+    "prompt:rate",
+    "prompt:image",
+    "apikey:create"
+  ]
+}
