@@ -1,0 +1,25 @@
+name: Realm guard
+
+# Guard the production realm export against ever gaining secrets or users
+# (ADR 0007). Scoped to the prod file so it runs on any PR — or push — that
+# touches it; the dev realm-export.json is deliberately not covered.
+on:
+  push:
+    paths:
+      - keycloak/realm-export.prod.json
+      - keycloak/check-prod-realm-secrets.py
+      - .github/workflows/realm-guard.yml
+  pull_request:
+    paths:
+      - keycloak/realm-export.prod.json
+      - keycloak/check-prod-realm-secrets.py
+      - .github/workflows/realm-guard.yml
+
+jobs:
+  no-secrets-in-prod-realm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assert prod realm has no secrets or users
+        run: python3 keycloak/check-prod-realm-secrets.py

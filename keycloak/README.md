@@ -87,6 +87,20 @@ passkey/TOTP steps. See [Verifying the Gallery Ops flow](#verifying-the-gallery-
 
 Before deploying, replace the placeholder `gallery-app` redirect URI / web origin (`https://gallery.example.org`) with the real production SPA origin.
 
+### CI guard: prod realm stays credential-free
+
+`keycloak/check-prod-realm-secrets.py` enforces the "zero secrets, zero users"
+rule above so a future edit can't quietly reintroduce the credential-in-JSON
+pattern (which is fine in the dev `realm-export.json` but not here). It fails if
+`realm-export.prod.json` gains a `secret` key on any client, a non-empty
+top-level `users` array, or a `credentials` array on any user. The
+`.github/workflows/realm-guard.yml` job runs it on every push/PR that touches
+the prod file; it never looks at the dev `realm-export.json`. Run it locally with:
+
+```bash
+python3 keycloak/check-prod-realm-secrets.py
+```
+
 ---
 
 ## Gallery Ops login: passkey OR password+TOTP
