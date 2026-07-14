@@ -282,15 +282,24 @@ auth_code_pkce_flow() {
     --data-urlencode "state=$state" \
     --data-urlencode "code_challenge=$challenge" \
     --data-urlencode "code_challenge_method=S256")" || { rm -f "$jar"; return 1; }
-  action="$(printf '%s' "$page" | grep -oiP 'action="\K[^"]+' | head -1 | sed 's/&amp;/\&/g')"
+  # Portable extraction (no grep -P — BSD/macOS grep lacks it): pull the login form's
+  # action URL from the HTML and html-unescape it.
+  action="$(printf '%s' "$page" | python3 -c '
+import sys, re, html
+h = sys.stdin.read()
+m = re.search(r"id=\"kc-form-login\"[^>]*action=\"([^\"]+)\"", h) or re.search(r"action=\"([^\"]+)\"", h)
+print(html.unescape(m.group(1)) if m else "")')"
   [ -n "$action" ] || { info "could not find login form action in auth page"; rm -f "$jar"; return 1; }
 
   # 2. POST credentials; the success redirect (302) carries ?code=... in Location.
   local location code
   location="$(curl -sS -c "$jar" -b "$jar" -D - -o /dev/null "$action" \
     --data-urlencode "username=$T_USER" --data-urlencode "password=$T_USER_PW" \
-    | grep -i '^location:' | head -1 | tr -d '\r')"
-  code="$(printf '%s' "$location" | grep -oP 'code=\K[^&]+' || true)"
+    | tr -d '\r' | awk 'tolower($1)=="location:"{print $2; exit}')"
+  code="$(printf '%s' "$location" | python3 -c '
+import sys, re
+m = re.search(r"[?&]code=([^&\s]+)", sys.stdin.read())
+print(m.group(1) if m else "")')"
   rm -f "$jar"
   [ -n "$code" ] || { info "login did not yield an authorization code (location: ${location:-none})"; return 1; }
   green "obtained authorization code"
@@ -335,32 +344,49 @@ PY
 
 print_manual() {
   local secret="$1"
+  # Compute a concrete verifier/challenge here so the URL below is paste-ready — no
+  # shell variables to expand (a browser won't expand $CLIENT_ID etc).
+  local verifier challenge authurl
+  verifier="$(python3 -c 'import secrets;print(secrets.token_urlsafe(64))')"
+  challenge="$(python3 -c 'import hashlib,base64,sys;print(base64.urlsafe_b64encode(hashlib.sha256(sys.argv[1].encode()).digest()).rstrip(b"=").decode())' "$verifier")"
+  authurl="$(python3 - "$KC_URL" "$REALM" "$T_CLIENT_ID" "$T_REDIRECT" "$challenge" <<'PY'
+import sys, urllib.parse as u
+kc, realm, cid, redirect, challenge = sys.argv[1:6]
+q = u.urlencode({"client_id": cid, "response_type": "code",
+                 "scope": "openid prompt:write prompt:rate",
+                 "redirect_uri": redirect, "code_challenge": challenge,
+                 "code_challenge_method": "S256"})
+print(f"{kc}/realms/{realm}/protocol/openid-connect/auth?{q}")
+PY
+)"
   cat <<EOF
 
 ── Manual auth-code + PKCE fallback (AC 2 & 3 of #95) ────────────────────────
 The client is created and configured; only the interactive login couldn't be
-scripted here. Drive it by hand against the scratch realm:
+scripted here. Drive it by hand (values below are concrete — nothing to expand):
 
-  CLIENT_ID=$T_CLIENT_ID
-  SECRET=$secret
-  REDIRECT=$T_REDIRECT
-  V=\$(python3 -c 'import secrets;print(secrets.token_urlsafe(64))')
-  C=\$(python3 -c 'import hashlib,base64,sys;print(base64.urlsafe_b64encode(hashlib.sha256(sys.argv[1].encode()).digest()).rstrip(b"=").decode())' "\$V")
+1. Paste this URL into a browser, log in as $T_USER / $T_USER_PW, then copy the
+   'code=' query param from the redirect to $T_REDIRECT
+   (the page itself won't load — you only need the code):
 
-1. Open this URL in a browser, log in as $T_USER / $T_USER_PW, and copy the
-   'code' query param from the redirect to $T_REDIRECT (the page won't load —
-   that's fine, you only need the code):
+  $authurl
 
-  $KC_URL/realms/$REALM/protocol/openid-connect/auth?client_id=\$CLIENT_ID&response_type=code&scope=openid%20prompt:write&redirect_uri=\$REDIRECT&code_challenge=\$C&code_challenge_method=S256
-
-2. Exchange it:
+2. Exchange it (replace <CODE>):
 
   curl -s -X POST $KC_URL/realms/$REALM/protocol/openid-connect/token \\
-    -d grant_type=authorization_code -d code=<CODE> -d redirect_uri=\$REDIRECT \\
-    -d client_id=\$CLIENT_ID -d client_secret=\$SECRET -d code_verifier=\$V | jq .
+    -d grant_type=authorization_code -d 'code=<CODE>' \\
+    -d 'redirect_uri=$T_REDIRECT' \\
+    -d 'client_id=$T_CLIENT_ID' \\
+    -d 'client_secret=$secret' \\
+    -d 'code_verifier=$verifier' | jq .
 
-3. Decode the access_token payload and confirm: aud contains prompt-gallery-api,
-   azp=\$CLIENT_ID, and realm_access.roles holds the user's granted verbs.
+3. Confirm the access_token claims:
+
+  <the curl above> | jq -r .access_token \\
+    | cut -d. -f2 | python3 -c 'import sys,base64,json; s=sys.stdin.read().strip(); print(json.dumps(json.loads(base64.urlsafe_b64decode(s+"="*(-len(s)%4))),indent=2))'
+
+  Expect: aud contains "prompt-gallery-api", azp="$T_CLIENT_ID", and
+  realm_access.roles holds the user's granted verbs (prompt:read/write/rate).
 ──────────────────────────────────────────────────────────────────────────────
 EOF
 }
