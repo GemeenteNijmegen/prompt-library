@@ -140,6 +140,32 @@ The offline layer asserts the flow shape, the `browserFlow` binding, the WebAuth
 
 ---
 
+## Org-deployed client template
+
+`keycloak/templates/org-deployed-client.json` is a **template, not an importable realm fragment** and is not part of `realm-export.prod.json`. It is the copy-paste-and-fill starting point for [ADR 0004](../docs/adr/0004-access-model-oauth-clients.md) step 5 — one confidential OAuth client per chat client a customer Organisation deploys, created via the Admin Console or Admin REST API (`POST /admin/realms/gallery/clients`) at onboarding.
+
+Fill the `{{CLIENT_ID}}`, `{{ORG_SLUG}}`, `{{REDIRECT_URIS}}`, `{{WEB_ORIGINS}}` placeholders, drop the `_comment` key, create the client, then retrieve the Keycloak-generated secret out-of-band (Credentials tab) and hand `client_id` + `client_secret` to the deployment team over a secure channel. No secret is committed.
+
+The template gets the mechanical bits right every time: confidential client, PKCE-S256 required, `gallery-defaults` attached (this is what carries `aud=prompt-gallery-api`, `realm_access.roles`, `sub`, `org_id`), `prompt:read` as the one default gallery scope, and the optional-scope list deliberately **excluding** `admin:*` / `prompt:moderate` / `prompt:publish:public`.
+
+> **Consistency aid, not a security boundary** (ADR 0004 Revision 3): the optional-scope list does *not* gate what lands in a token — effective permissions come from the roles the End User holds (`realm_access.roles`), and no customer End User is ever granted the operator-only roles. Leaving those scopes off the list matches documented intent; it is not technically enforced by the client.
+
+### Verifying the template
+
+`keycloak/verify-org-client-template.sh` mirrors `verify-prod-realm.sh`:
+
+```bash
+# Offline — structural assertions on the template JSON, no Docker/network. Runs in CI.
+keycloak/verify-org-client-template.sh --offline
+
+# Full run — against a scratch Keycloak (import realm-export.prod.json first, as above):
+keycloak/verify-org-client-template.sh
+```
+
+The offline layer checks the placeholders, that an instantiated copy is valid JSON, the confidential/PKCE-S256/auth-code shape, the default-vs-optional scope split, and that no forbidden scope is present. When a scratch Keycloak is reachable at `KC_URL` (default `http://localhost:8081`) the live layer instantiates the template, creates the client via REST, asserts the imported config and scope split, retrieves the generated secret, provisions a role-bearing test user, then drives a **full authorization-code + PKCE flow** and decodes the resulting token to confirm `aud=prompt-gallery-api`, `azp=<client>`, and the expected `realm_access.roles` — then cleans up the throwaway client/user. (It briefly swaps the realm `browserFlow` to the built-in `browser` flow so the login can be scripted with curl, and restores it on exit; if the scripted login can't be driven it prints the manual auth-code steps instead.)
+
+---
+
 ## Editing the realm
 
 **Rule: `keycloak/realm-export.json` is the single source of truth for local dev.** Keycloak's storage is ephemeral (H2, wiped on `docker compose down`). Any change you make via the admin UI is lost on next restart unless you re-export and commit the JSON. (For production changes, edit `realm-export.prod.json` and re-run the import per the runbook — the dev stack never touches it.)
