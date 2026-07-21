@@ -293,10 +293,20 @@ async def health(request: Request) -> JSONResponse:
 
 def build_app() -> ASGIApp:
     """Return the ASGI app with auth middleware and CORS applied."""
-    resource_host = urlparse(settings.MCP_RESOURCE_URL).netloc
+    parsed = urlparse(settings.MCP_RESOURCE_URL)
+    resource_host = parsed.netloc
+    resource_origin = f"{parsed.scheme}://{parsed.netloc}"
     mcp.settings.transport_security = TransportSecuritySettings(
         enable_dns_rebinding_protection=True,
         allowed_hosts=["127.0.0.1:*", "localhost:*", "[::1]:*", resource_host],
+        # Browser-based MCP clients (e.g. MCP Inspector) send an Origin header.
+        # Non-browser clients (Claude Desktop, mcp-remote) send none and pass automatically.
+        allowed_origins=[
+            "http://localhost:*",
+            "http://127.0.0.1:*",
+            "https://localhost:*",
+            resource_origin,
+        ],
     )
     app: ASGIApp = _AuthMiddleware(mcp.streamable_http_app())
     return CORSMiddleware(
