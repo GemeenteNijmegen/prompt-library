@@ -8,9 +8,11 @@ gallery is the single enforcement point for visibility and scope.
 """
 import contextvars
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -291,6 +293,11 @@ async def health(request: Request) -> JSONResponse:
 
 def build_app() -> ASGIApp:
     """Return the ASGI app with auth middleware and CORS applied."""
+    resource_host = urlparse(settings.MCP_RESOURCE_URL).netloc
+    mcp.settings.transport_security = TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=["127.0.0.1:*", "localhost:*", "[::1]:*", resource_host],
+    )
     app: ASGIApp = _AuthMiddleware(mcp.streamable_http_app())
     return CORSMiddleware(
         app,
