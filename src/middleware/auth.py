@@ -141,7 +141,11 @@ def _authenticate(
         claims = decode_and_verify(token)
     except JWTExpiredError:
         raise _unauthorized("Token has expired")
-    except (JWTInvalidError, Exception):
+    except JWTInvalidError as exc:
+        _log.warning("JWT rejected: %s", exc)
+        raise _unauthorized("Invalid auth token")
+    except Exception as exc:
+        _log.warning("JWT verification failed unexpectedly: %r", exc)
         raise _unauthorized("Invalid auth token")
     if "sub" not in claims:
         raise _unauthorized("Token missing required claim: sub")
