@@ -293,6 +293,70 @@ python scripts/dev_token.py --scope prompt:read prompt:create
 # prints a short-lived HS256 Bearer token; refuses to run when ENVIRONMENT=production
 ```
 
+### Minting a persistent API key (`pg_…`)
+
+`scripts/dev_token.py` above only mints a short-lived dev/test JWT. For a real,
+long-lived credential — for a chat bot, a CI pipeline, or your own personal
+use — use `scripts/generate_api_key.py` instead. It calls `POST
+/api/v1/me/api-keys` (ADR 0004) on your behalf, which needs an interactive
+OAuth/JWT bearer token to authorize the request; the script gets you one via
+whichever login flow fits, then exchanges it for the opaque `pg_…` key. It
+works the same way against local dev and a real deployed Keycloak — only the
+`--base-url` / `--keycloak-url` / `--realm` and login flow you pick change.
+
+**Dev (local stack, `docker compose --profile keycloak`):** the seeded
+`devuser` / `devpass` password grant, no browser needed:
+
+```bash
+GALLERY_PASSWORD=devpass python scripts/generate_api_key.py --label "my key" --username devuser
+```
+
+**Prod (any deployed Keycloak) — personal key:** opens your browser, logs you
+in via the pre-registered public `mcp-client` loopback client (authorization-code
++ PKCE, no devtools):
+
+```bash
+python scripts/generate_api_key.py \
+  --label "my laptop" \
+  --base-url https://<gallery-host> \
+  --keycloak-url https://<keycloak-host> --realm gallery
+```
+
+This requires `mcp-client` to already be registered on that realm — see
+`keycloak/templates/mcp-public-client.json` and `gallery_mcp/README.md`'s
+production checklist.
+
+**Prod — service/bot key (headless, no browser, CI-safe):** per ADR 0004's
+"service-identity keys for headless users," a Gallery Operator first creates a
+local, non-Entra-federated Keycloak user for the service identity and grants
+it the scopes it needs; then mint the key with a password grant against that
+user:
+
+```bash
+GALLERY_PASSWORD="$SVC_PASSWORD" python scripts/generate_api_key.py \
+  --label "acme-chatbot" \
+  --base-url https://<gallery-host> \
+  --keycloak-url https://<keycloak-host> --realm gallery \
+  --username svc-acme-chatbot
+```
+
+Never pass `--password` as a bare value on an interactive shell — it lands in
+shell history and is visible to other users via `ps`. Prefer `$GALLERY_PASSWORD`
+(a CI secret store injects this) or omit `--password` for a hidden prompt.
+
+**Already have a bearer token** (e.g. from `scripts/keycloak_token.py`)? Skip
+the login step entirely:
+
+```bash
+python scripts/generate_api_key.py --token "$TOKEN" --label "my key"
+```
+
+If a browser can't be opened and no headless user is set up, `--paste-token`
+falls back to the manual devtools flow (grab the `Authorization` header from
+Network tab after logging in). The command prints the raw `pg_…` secret
+**exactly once** — store it immediately; a lost key can't be recovered, only
+revoked and reissued via `DELETE`/`POST /api/v1/me/api-keys`.
+
 ## API prefix
 
 All routes are under `/api/v1/`. Health: `GET /api/v1/health`.
