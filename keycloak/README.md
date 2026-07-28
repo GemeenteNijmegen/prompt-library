@@ -103,6 +103,36 @@ python3 keycloak/check-prod-realm-secrets.py
 
 ---
 
+## Integrating a browser SPA (`gallery-app` client)
+
+Any single-page app that logs its own users into the gallery via `gallery-app` (or a client modelled on it) needs two things Keycloak doesn't warn you about up front. Both were worked out the hard way integrating the Leiden AI Challenge platform's Prompt Gallery frontend (`frontend/src/services/keycloakClient.js` / `api.js` in that repo) against a shared, non-local Keycloak instance — recorded here so the next integration doesn't repeat the debugging.
+
+**1. Redirect URIs and Web Origins are two separate fields — set both.**
+
+`keycloak/realm-export.json` (local dev) already has both set correctly for this repo's own dev server:
+```json
+"redirectUris": ["http://localhost:5173/*", "http://localhost:8000/*"],
+"webOrigins": ["http://localhost:5173", "http://localhost:8000"]
+```
+`redirectUris` governs where Keycloak is willing to send the browser back to after login (an exact/wildcard match on the OAuth `redirect_uri` param — miss it and you get Keycloak's own "Invalid parameter: redirect_uri" error page). `webOrigins` is unrelated and governs CORS on Keycloak's endpoints — specifically the background `fetch` a client-side OAuth library makes to the token endpoint right after the redirect back, to exchange the auth code for tokens. Miss *this* one and the redirect/login itself appears to work, but the token exchange fails silently with a CORS error in the console, the app never becomes authenticated, and (depending on how the SPA reacts to a still-unauthenticated state) you can end up in a login redirect loop that looks unrelated to CORS at all.
+
+`realm-export.prod.json` ships `gallery-app` with placeholder values (`https://gallery.example.org`) in both fields — deliberately, since the prod realm is imported once per environment (per `PRODUCTION.md`) and each environment's Gallery Operator fills in the real origin(s). If you're integrating a new SPA against a **shared, already-imported** Keycloak instance (dev, staging, whatever), you can't do this yourself from the SPA side — ask whoever administers that instance to add your dev origin(s) to *both* fields on the client you're using, not just the redirect URIs.
+
+**2. Keycloak's default CSP blocks iframe-based silent SSO checks, for every client.**
+
+Neither realm export sets a custom `browserSecurityHeaders`, so Keycloak's built-in default applies everywhere this realm is imported: `frame-ancestors 'self'`. That means the common `keycloak-js` pattern of a background session check —
+```js
+keycloak.init({ onLoad: 'check-sso', silentCheckSsoRedirectUri: `${origin}/silent-check-sso.html` })
+```
+— will fail in every browser, local dev included: the hidden iframe tries to load Keycloak's auth endpoint from your SPA's origin, and Keycloak's own CSP header refuses to render inside a frame from anywhere but itself. The browser console shows something like:
+```
+Refused to load '.../protocol/openid-connect/auth?...' because it does not
+appear in the frame-ancestors directive of the Content Security Policy.
+```
+There's no client-side workaround for the CSP itself short of a realm admin adding your origin to `frame-ancestors` (Realm settings → Security defenses → Content-Security-Policy) — not recommended, since it's the anti-clickjacking default for a reason. The simpler fix is to not rely on the iframe at all: drop `silentCheckSsoRedirectUri` (and `onLoad: 'check-sso'` if your app already redirects explicitly when unauthenticated) so session checks fall back to a full top-level redirect instead. That costs a visible redirect flash on first load when there's no session yet, but isn't subject to `frame-ancestors` since it's a real page navigation, not a framed embed. If your app has its own explicit "redirect to login" logic, make sure it's the *only* thing triggering a redirect — running it alongside `onLoad: 'check-sso'`'s own automatic redirect is two independent redirects racing over the same PKCE `state` in `sessionStorage`, which produces a redirect loop distinct from the CSP issue above.
+
+---
+
 ## Gallery Ops login: passkey OR password+TOTP
 
 The realm's `browserFlow` is bound to a custom `gallery-ops-browser` flow (ADR 0007, issue #94). Structure:
