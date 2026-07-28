@@ -2,6 +2,8 @@
 
 Standalone REST API for managing, searching, and rating AI prompts. Built with FastAPI + SQLAlchemy + Pydantic v2.
 
+> New here? [docs/QUICKSTART.md](docs/QUICKSTART.md) explains how this repo, the Leiden AI Challenge platform, Keycloak, and chat clients (OpenWebUI, Copilot Enterprise, MCP clients) fit together — read that before the rest of this file.
+
 ## Quick start
 
 ```bash
