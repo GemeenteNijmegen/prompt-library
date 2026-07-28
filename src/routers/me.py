@@ -81,6 +81,7 @@ def create_api_key(
         token_hash=token_hash,
         token_prefix=token_prefix,
         scopes=scopes,
+        created_at=now,
         expires_at=now + timedelta(days=DEFAULT_TTL_DAYS),
     )
     db.add(key)
