@@ -1,3 +1,11 @@
+# ⚠️  LOCAL DEVELOPMENT ONLY
+# This file contains plaintext credentials for local Docker Compose stacks only.
+# These are NOT real credentials and are never used in production.
+# Production uses keycloak/realm-export.prod.json (zero secrets) + external
+# runbook-provisioned credentials (see keycloak/PRODUCTION.md).
+# CI automation (keycloak/check-prod-realm-secrets.py) prevents secrets from
+# entering production realm files.
+
 # Profiles:
 #   full       – Postgres 18 + Redis 7 + app + mcp, built images  [default]
 #   dev        – same infrastructure + src volumes + --reload + mcp-dev
