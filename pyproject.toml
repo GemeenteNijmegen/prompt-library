@@ -19,7 +19,7 @@ dependencies = [
     "python-multipart>=0.0.9",
     "cachetools>=5.3",
     "aiofiles>=23.2",
-    "mcp[cli]>=1.0",
+    "mcp[cli]>=1.9,<2",
 ]
 
 [tool.setuptools.packages.find]
