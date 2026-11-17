@@ -77,7 +77,7 @@ def test_requirements_mcp_contains_pydantic_settings():
 def test_requirements_mcp_excludes_heavy_gallery_deps():
     """Sidecar image must not pull in gallery-only heavyweights."""
     text = _requirements_mcp()
-    for dep in ("fastembed", "alembic", "sqlalchemy", "boto3", "psycopg2"):
+    for dep in ("fastembed", "alembic", "sqlalchemy", "boto3", "psycopg"):
         assert dep not in text, f"requirements-mcp.txt must not include {dep}"
 
 

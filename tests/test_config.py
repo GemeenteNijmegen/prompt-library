@@ -42,8 +42,8 @@ class TestDatabaseUrlDirect:
         assert s.DATABASE_URL == "sqlite:///data/gallery.db"
 
     def test_explicit_url_is_preserved_when_no_host(self):
-        s = _make_settings(DATABASE_URL="postgresql+psycopg2://user:pass@host/db")
-        assert s.DATABASE_URL == "postgresql+psycopg2://user:pass@host/db"
+        s = _make_settings(DATABASE_URL="postgresql+psycopg://user:pass@host/db")
+        assert s.DATABASE_URL == "postgresql+psycopg://user:pass@host/db"
 
 
 class TestDatabaseUrlAssembly:
@@ -58,7 +58,7 @@ class TestDatabaseUrlAssembly:
             DATABASE_NAME="mydb",
         )
         url = make_url(s.DATABASE_URL)
-        assert url.drivername == "postgresql+psycopg2"
+        assert url.drivername == "postgresql+psycopg"
         assert url.username == "myuser"
         assert url.password == "mypassword"
         assert url.host == "db.example.com"
@@ -116,7 +116,7 @@ class TestDatabaseUrlAssembly:
             DATABASE_PASSWORD="p",
             DATABASE_NAME="mydb",
         )
-        assert s.DATABASE_URL.startswith("postgresql+psycopg2://")
+        assert s.DATABASE_URL.startswith("postgresql+psycopg://")
 
     def test_custom_port(self):
         from src.config import Settings
