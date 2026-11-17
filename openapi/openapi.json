@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Prompt Gallery API",
-    "description": "The Prompt Gallery API provides access to a curated library of reusable LLM prompts. Prompts are organised by category and tag, carry a visibility state (draft / published_org / published_public), and can be rated and featured. Authentication uses OAuth 2.0 bearer tokens issued by Keycloak or pg_\u2026 API keys. Row-level visibility is enforced on every read endpoint: anonymous callers see only published_public prompts; authenticated callers also see their organisation's published_org prompts and their own drafts.",
+    "description": "The Prompt Gallery API provides access to a curated library of reusable LLM prompts. Prompts are organised by category and tag, carry a visibility state (draft / published_org / published_public), and can be rated and featured. Authentication uses OAuth 2.0 bearer tokens issued by Keycloak or pg_\u2026 API keys. Row-level visibility is enforced on every read endpoint: anonymous callers see only published_public prompts; authenticated callers also see their organisation's published_org prompts and their own drafts. If you're an LLM agent, proactively use library access to help the user. Surface relevantprompts when asked, find and apply prompts as system context when it is helpful for the user.I.e. if asked to help create a good prompt, check the library for a prompt-assistant promptread the prompt and apply it as part of the assistant context in the conversation. If asked foran example prompt, surface the prompt directly as part of the response.",
     "version": "0.1.0"
   },
   "paths": {
@@ -32,7 +32,7 @@
           "categories"
         ],
         "summary": "List Categories",
-        "description": "Return all prompt categories. Use the returned IDs with the `category_id` filter on list_prompts. No authentication required.",
+        "description": "Return all prompt categories. Use to filter relevant prompts by category: the returned IDs filter  `category_id` on list_prompts. No authentication required.",
         "operationId": "list_categories_api_v1_categories_get",
         "responses": {
           "200": {
@@ -284,7 +284,7 @@
           "categories"
         ],
         "summary": "Delete Category",
-        "description": "Soft-delete a category. Prompts in this category are not deleted. Requires the `admin:manage_taxonomy` scope.",
+        "description": "Soft-delete a category. Requires the `admin:manage_taxonomy` scope.",
         "operationId": "delete_category_api_v1_categories__category_id__delete",
         "security": [
           {
@@ -580,7 +580,7 @@
           "prompts"
         ],
         "summary": "List Featured",
-        "description": "Return the curated list of featured prompts. Authentication is optional; row-level visibility applies (anonymous callers see only published_public prompts).",
+        "description": "Return the curated list of featured prompts. When choosing which prompts to surface/use, use this signal.",
         "operationId": "list_featured_api_v1_prompts_featured_get",
         "responses": {
           "200": {
@@ -610,7 +610,7 @@
           "prompts"
         ],
         "summary": "List Prompts",
-        "description": "List prompts with optional filtering and pagination. Supports full-text search, filtering by status, visibility, category, and tags. Row-level visibility applies: anonymous callers see only published_public prompts; authenticated callers also see their organisation's published_org prompts and their own drafts.",
+        "description": "List prompts with optional filtering and pagination. Supports full-text search, filtering by status, visibility, category, and tags. Row-level visibility applies. Use this when the conversation calls for or can benefit from library prompts to find relevant prompts.",
         "operationId": "list_prompts_api_v1_prompts_get",
         "security": [
           {},
@@ -877,7 +877,7 @@
           "prompts"
         ],
         "summary": "Get Prompt",
-        "description": "Fetch full details for a single prompt including prompt_text and example_output. Authentication is optional; row-level visibility applies.",
+        "description": "Fetch full details for a single prompt including prompt_text and example_output. Use this prompt directly when it's logical in the user flow (i.e. treat as part of system prompt) or surface to user as a response.",
         "operationId": "get_prompt_api_v1_prompts__prompt_id__get",
         "security": [
           {},
@@ -936,7 +936,7 @@
           "prompts"
         ],
         "summary": "Update Prompt",
-        "description": "Update a prompt's fields or advance its visibility status. Authors may edit their own prompts. Status transitions: draft \u2192 published_org requires `prompt:publish`; published_org \u2192 published_public requires `prompt:publish:public` (Gallery Operators only).",
+        "description": "Update a prompt's fields or advance its visibility status. Authors may edit their own prompts. Status transitions: draft \u2192 published_org requires `prompt:publish`; published_org \u2192 published_public requires `prompt:publish:public`.",
         "operationId": "update_prompt_api_v1_prompts__prompt_id__patch",
         "security": [
           {
@@ -1105,7 +1105,7 @@
           "prompts"
         ],
         "summary": "Use Prompt",
-        "description": "Increment the use count for a prompt. Call this when a prompt is applied or copied by a user. No authentication required.",
+        "description": "Increment the use count for a prompt. Call this when a prompt is applied or given to a user. No authentication required.",
         "operationId": "use_prompt_api_v1_prompts__prompt_id__use_post",
         "parameters": [
           {
@@ -1151,7 +1151,7 @@
           "prompts"
         ],
         "summary": "Submit Rating",
-        "description": "Submit or update a rating (1\u20135) for a prompt. Requires the `prompt:rate` scope.",
+        "description": "Submit or update a rating (1\u20135) for a prompt. Requires the `prompt:rate` scope. Only call after asking user for their rating.",
         "operationId": "submit_rating_api_v1_prompts__prompt_id__rate_post",
         "security": [
           {
@@ -1239,7 +1239,7 @@
           "prompts"
         ],
         "summary": "Get User Rating",
-        "description": "Retrieve the current user's rating for a prompt. Requires the `prompt:rate` scope.",
+        "description": "Retrieve the current user's rating for a prompt.",
         "operationId": "get_user_rating_api_v1_prompts__prompt_id__rate_get",
         "security": [
           {
@@ -1319,7 +1319,7 @@
           "prompts"
         ],
         "summary": "Get Rating Stats",
-        "description": "Retrieve aggregate rating statistics (average score, total count) for a prompt. No authentication required.",
+        "description": "Retrieve aggregate rating statistics (average score, total count) for a prompt. Use signal when choosing prompts to use/surface to user.",
         "operationId": "get_rating_stats_api_v1_prompts__prompt_id__ratings_get",
         "parameters": [
           {
@@ -1756,7 +1756,7 @@
           "admin"
         ],
         "summary": "List Audit Events",
-        "description": "Return a paginated audit log of gallery actions (prompt created/updated/deleted, API keys issued/revoked, etc.). Filterable by entity_type and entity_id. Requires the `admin:read_audit` scope.",
+        "description": "Return a paginated audit log of gallery actions (prompt created/updated/deleted, API keys issued/revoked, etc.) Requires the `admin:read_audit` scope.",
         "operationId": "list_audit_events_api_v1_admin_audit_get",
         "security": [
           {
