@@ -80,7 +80,7 @@ class Settings(BaseSettings):
         if self.DATABASE_HOST:
             from sqlalchemy.engine.url import URL
             self.DATABASE_URL = URL.create(
-                "postgresql+psycopg2",
+                "postgresql+psycopg",
                 username=self.DATABASE_USERNAME,
                 password=self.DATABASE_PASSWORD,
                 host=self.DATABASE_HOST,
